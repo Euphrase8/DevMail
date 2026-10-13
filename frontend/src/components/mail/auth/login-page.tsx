@@ -1,5 +1,6 @@
-import { useState, type FormEvent } from "react";
+import { useEffect, useState, type FormEvent } from "react";
 import { Link, useNavigate } from "@tanstack/react-router";
+import { useQuery, useQueryClient } from "@tanstack/react-query";
 import {
   ArrowLeftRight,
   ArrowRight,
@@ -13,6 +14,7 @@ import {
 } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Logo } from "../shell/shell";
+import { api, ApiError } from "@/lib/api";
 
 type Mode = "login" | "bootstrap" | "mfa" | "reset";
 
@@ -42,22 +44,64 @@ const subheading: Record<Mode, string> = {
 export function LoginPage() {
   const [mode, setMode] = useState<Mode>("login");
   const [message, setMessage] = useState("");
+  const [error, setError] = useState("");
+  const [busy, setBusy] = useState(false);
   const navigate = useNavigate();
+  const queryClient = useQueryClient();
 
-  function handleSubmit(e: FormEvent<HTMLFormElement>) {
+  const status = useQuery({
+    queryKey: ["auth", "status"],
+    queryFn: api.authStatus,
+    retry: false,
+    staleTime: 30_000,
+  });
+
+  useEffect(() => {
+    if (status.data && !status.data.hasUsers) setMode("bootstrap");
+  }, [status.data]);
+
+  async function handleSubmit(e: FormEvent<HTMLFormElement>) {
     e.preventDefault();
+    setMessage("");
+    setError("");
     if (mode === "reset") {
       setMessage(
         "If an account exists, a connected authentication service would send reset instructions. No email was sent.",
       );
       return;
     }
-    navigate({ to: "/" });
+    if (mode === "mfa") {
+      setMessage("MFA enrollment is configured during administrator setup.");
+      return;
+    }
+
+    const form = e.currentTarget;
+    const fd = new FormData(form);
+    const email = String(fd.get("email") ?? "").trim();
+    const password = String(fd.get("password") ?? "");
+    const name = String(fd.get("name") ?? "").trim();
+
+    setBusy(true);
+    try {
+      if (mode === "bootstrap") {
+        await api.setup({ email, name, password });
+      } else {
+        await api.login({ email, password });
+      }
+      queryClient.invalidateQueries({ queryKey: ["session"] });
+      queryClient.invalidateQueries({ queryKey: ["health"] });
+      navigate({ to: "/" });
+    } catch (err) {
+      setError(err instanceof ApiError ? err.message : "Could not reach the API. Is the backend running?");
+    } finally {
+      setBusy(false);
+    }
   }
 
   function switchMode(next: Mode) {
     setMode(next);
     setMessage("");
+    setError("");
   }
 
   return (
@@ -84,12 +128,21 @@ export function LoginPage() {
             <p className="mt-4 text-sm leading-6 text-muted-foreground">{subheading[mode]}</p>
 
             <form className="mt-9 space-y-5" onSubmit={handleSubmit}>
+              {mode === "bootstrap" && (
+                <label className="block">
+                  Administrator name
+                  <input type="text" name="name" required autoComplete="name" placeholder="Ops Admin" />
+                </label>
+              )}
               {mode !== "mfa" && (
                 <label className="block">
                   Email address
                   <input
                     type="email"
+                    name="email"
                     required
+                    autoCapitalize="none"
+                    autoCorrect="off"
                     placeholder="you@example.com"
                     autoComplete="username"
                   />
@@ -100,8 +153,9 @@ export function LoginPage() {
                   Password
                   <input
                     type="password"
+                    name="password"
                     required
-                    minLength={8}
+                    minLength={mode === "bootstrap" ? 12 : 8}
                     autoComplete={mode === "bootstrap" ? "new-password" : "current-password"}
                   />
                 </label>
@@ -139,7 +193,7 @@ export function LoginPage() {
                 </div>
               )}
 
-              <Button className="w-full" type="submit">
+              <Button className="w-full" type="submit" disabled={busy}>
                 {mode === "reset"
                   ? "Request reset"
                   : mode === "mfa"
@@ -149,6 +203,15 @@ export function LoginPage() {
                       : "Sign in"}
                 <ArrowRight />
               </Button>
+
+              {error && (
+                <p
+                  role="alert"
+                  className="border-y border-[oklch(0.58_0.18_30)] py-4 text-xs leading-6 text-warning"
+                >
+                  {error}
+                </p>
+              )}
 
               {message && (
                 <p
@@ -161,7 +224,7 @@ export function LoginPage() {
             </form>
 
             <div className="mt-8 flex flex-wrap gap-2 border-t border-border pt-5">
-              {(["login", "bootstrap", "mfa"] as Mode[])
+              {(["login", "bootstrap"] as Mode[])
                 .filter((m) => m !== mode)
                 .map((m) => (
                   <Button
@@ -171,14 +234,18 @@ export function LoginPage() {
                     onClick={() => switchMode(m)}
                     className="px-0 text-xs text-muted-foreground"
                   >
-                    {m === "login" ? "Sign in" : m === "mfa" ? "MFA preview" : "Administrator setup"}
+                    {m === "login" ? "Sign in" : "Administrator setup"}
                   </Button>
                 ))}
             </div>
 
             <p className="mt-8 flex gap-2 text-xs text-muted-foreground">
               <ShieldCheck className="size-4 text-primary" />
-              Frontend preview · authentication is not connected
+              {status.isLoading
+                ? "Checking service availability…"
+                : status.error
+                  ? "API unavailable. Start the backend (go run ./cmd/api) to connect."
+                  : "Connected to the DevMail API"}
             </p>
           </div>
         </main>

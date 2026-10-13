@@ -7,13 +7,30 @@ import {
   HeadContent,
   Scripts,
   useLocation,
+  useNavigate,
   type ErrorComponentProps,
 } from "@tanstack/react-router";
-import type { ReactNode } from "react";
+import { useEffect, type ReactNode } from "react";
 
 import appCss from "../styles.css?url";
-import { MailProvider } from "@/components/mail/store";
+import { MailProvider, useMail } from "@/components/mail/store";
 import { MailShell } from "@/components/mail/shell/shell";
+
+// SessionGate redirects anonymous visitors to the login screen once we know
+// the API is reachable and has no session for this browser. When the backend
+// is unreachable the workspace stays visible in its honest fallback state.
+function SessionGate({ children }: { children: ReactNode }) {
+  const { session, sessionKnown, backend } = useMail();
+  const navigate = useNavigate();
+
+  useEffect(() => {
+    if (backend === "online" && sessionKnown && !session) {
+      navigate({ to: "/login", replace: true });
+    }
+  }, [backend, sessionKnown, session, navigate]);
+
+  return <>{children}</>;
+}
 
 function NotFoundComponent() {
   return (
@@ -122,7 +139,15 @@ function RootComponent() {
   return (
     <QueryClientProvider client={queryClient}>
       <MailProvider>
-        {pathname === "/login" ? <Outlet /> : <MailShell><Outlet /></MailShell>}
+        {pathname === "/login" ? (
+          <Outlet />
+        ) : (
+          <SessionGate>
+            <MailShell>
+              <Outlet />
+            </MailShell>
+          </SessionGate>
+        )}
       </MailProvider>
     </QueryClientProvider>
   );

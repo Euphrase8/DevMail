@@ -9,6 +9,9 @@ dist-ssr/
 .nitro/
 .wrangler/
 
+# Go backend build artifacts
+backend/bin/
+
 # TanStack generated artifacts
 .tanstack/
 

@@ -37,7 +37,7 @@ export function Logo() {
 
 export function MailShell({ children }: { children: ReactNode }) {
   const { pathname } = useLocation();
-  const { notice, notify, data } = useMail();
+  const { notice, notify, data, backend, signOut, session } = useMail();
   const [mobile, setMobile] = useState(false);
   const [searchOpen, setSearchOpen] = useState(false);
   const [query, setQuery] = useState("");
@@ -100,7 +100,7 @@ export function MailShell({ children }: { children: ReactNode }) {
         <div className="flex shrink-0 items-center gap-1.5 md:gap-2">
           <span className="mr-1 hidden items-center gap-2 font-mono text-[10px] text-muted-foreground lg:flex">
             <span className="live-dot" />
-            Demo environment
+            {backend === "online" ? "API connected" : "Sample data"}
           </span>
           <Button
             aria-label="Toggle color theme"
@@ -296,8 +296,10 @@ export function MailShell({ children }: { children: ReactNode }) {
           </DialogTitle>
           <DialogDescription>
             {panel === "help"
-              ? "Frontend preview — live infrastructure services are not connected."
-              : "Sample workspace · frontend session only"}
+              ? "Help topics cover the mail workflow end to end."
+              : backend === "online"
+                ? "Connected to the DevMail API."
+                : "API offline · showing sample workspace data"}
           </DialogDescription>
           {panel === "notifications" ? (
             <>
@@ -316,18 +318,31 @@ export function MailShell({ children }: { children: ReactNode }) {
           ) : panel === "account" ? (
             <>
               <p className="text-sm">
-                Alex Morgan <span className="text-muted-foreground">· Super Administrator</span>
+                {session ? (session.name || session.email) : "Alex Morgan"}
+                <span className="text-muted-foreground">
+                  · {session ? session.role.replace(/_/g, " ") : "Super Administrator"}
+                </span>
               </p>
               <Button variant="outline" asChild>
                 <Link to="/settings">Account & security</Link>
               </Button>
-              <Button variant="ghost" asChild>
-                <Link to="/login">Open sign-in preview</Link>
+              <Button
+                variant="ghost"
+                onClick={() => {
+                  void signOut();
+                  notify("Signed out.");
+                }}
+              >
+                Sign out
               </Button>
             </>
           ) : panel === "workspace" ? (
             <>
-              <p className="text-sm">3 servers · 8 domains · Acme workspace</p>
+              <p className="text-sm">
+                {backend === "online"
+                  ? `${(data["servers"] ?? []).length} servers · ${(data["domains"] ?? []).length} domains · Managed workspace`
+                  : "3 servers · 8 domains · Acme workspace"}
+              </p>
               <Button asChild>
                 <Link to="/settings">Workspace settings</Link>
               </Button>

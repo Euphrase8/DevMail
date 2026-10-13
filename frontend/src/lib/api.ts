@@ -1,0 +1,214 @@
+// Typed API client for the DevMail backend (/api/v1). All requests send
+// credentials so the httpOnly dm_session cookie authenticates protected
+// routes. When the API is unreachable the client throws ApiError, which callers
+// surface as an honest "unavailable" state — never fabricated data.
+const BASE = (import.meta.env?.["VITE_API_BASE"] as string | undefined) ?? "/api/v1";
+
+export class ApiError extends Error {
+  readonly code: string;
+  readonly status: number;
+  readonly fields: Record<string, unknown> | undefined;
+
+  constructor(status: number, code: string, message: string, fields?: Record<string, unknown>) {
+    super(message);
+    this.name = "ApiError";
+    this.code = code;
+    this.status = status;
+    this.fields = fields;
+  }
+}
+
+async function request<T>(path: string, init?: RequestInit): Promise<T> {
+  const res = await fetch(`${BASE}${path}`, {
+    ...init,
+    credentials: "include",
+    headers: {
+      "Content-Type": "application/json",
+      ...(init?.headers ?? {}),
+    },
+  });
+
+  let body: unknown = null;
+  try {
+    body = await res.json();
+  } catch {
+    body = null;
+  }
+
+  if (!res.ok) {
+    const err = (body as { error?: { code?: string; message?: string; fields?: Record<string, unknown> } })?.error;
+    throw new ApiError(
+      res.status,
+      err?.code ?? "internal",
+      err?.message ?? `Request failed (${res.status}).`,
+      err?.fields,
+    );
+  }
+
+  return (body as { data: T }).data;
+}
+
+export type User = {
+  id: string;
+  email: string;
+  name: string;
+  role: string;
+  isActive: boolean;
+  createdAt: string;
+};
+
+export type Server = {
+  id: string;
+  name: string;
+  hostname: string;
+  ipv4: string;
+  ipv6: string;
+  location: string;
+  environment: string;
+  notes: string;
+  status: string;
+  maintenance: boolean;
+  lastCheckAt: string;
+  lastCheckError: string;
+};
+
+export type DomainCheck = { kind: string; ok: boolean; detail: string; checkedAt: string };
+
+export type Domain = {
+  id: string;
+  name: string;
+  serverId: string;
+  status: string;
+  verificationToken: string;
+  verificationName: string;
+  verifiedAt: string;
+  catchAll: boolean;
+  quotaBytes: number;
+  createdAt: string;
+  checkResults?: DomainCheck[];
+};
+
+export type Mailbox = {
+  id: string;
+  domainId: string;
+  local: string;
+  address: string;
+  displayName: string;
+  quotaBytes: number;
+  status: string;
+  engineStatus: string;
+  passwordSetAt: string;
+  createdAt: string;
+};
+
+export type Alias = {
+  id: string;
+  domainId: string;
+  source: string;
+  destination: string;
+  forwarding: boolean;
+  enabled: boolean;
+  createdAt: string;
+};
+
+export type DashboardSummary = {
+  servers: { total: number; healthy: number; degraded: number; offline: number; pending: number; maintenance: number };
+  domains: { total: number; verified: number; active: number; degraded: number; pending: number; suspended: number };
+  mailboxes: number;
+  aliases: number;
+  users: number;
+  recent: { id: number; actor: string; action: string; resource: string; createdAt: string }[];
+};
+
+export type AuditEntry = {
+  id: number;
+  actorEmail: string;
+  action: string;
+  resourceType: string;
+  resourceId: string;
+  detail: unknown;
+  ip: string;
+  createdAt: string;
+};
+
+export type Job = {
+  id: string;
+  kind: string;
+  status: string;
+  error: string;
+  attempts: number;
+  maxAttempts: number;
+  createdAt: string;
+  finishedAt: string;
+};
+
+export const api = {
+  // Health + auth
+  health: () => request<{ status: string; db: string; time: string; version: string }>("/health"),
+  authStatus: () => request<{ hasUsers: boolean }>("/auth/status"),
+  setup: (payload: { email: string; name: string; password: string }) =>
+    request<User>("/auth/setup", { method: "POST", body: JSON.stringify(payload) }),
+  login: (payload: { email: string; password: string }) =>
+    request<User>("/auth/login", { method: "POST", body: JSON.stringify(payload) }),
+  logout: () => request<{ ok: boolean }>("/auth/logout", { method: "POST" }),
+  me: () => request<User>("/auth/me"),
+  listUsers: () => request<User[]>("/users"),
+  createUser: (payload: { email: string; name: string; role: string; password: string }) =>
+    request<User>("/users", { method: "POST", body: JSON.stringify(payload) }),
+  updateUser: (id: string, payload: { name: string; role: string; password?: string }) =>
+    request<User>(`/users/${id}`, { method: "PATCH", body: JSON.stringify(payload) }),
+  deleteUser: (id: string) => request<{ ok: boolean }>(`/users/${id}`, { method: "DELETE" }),
+
+  // Servers
+  listServers: () => request<Server[]>("/servers"),
+  createServer: (payload: Omit<Server, "id" | "status" | "maintenance" | "lastCheckAt" | "lastCheckError">) =>
+    request<Server>("/servers", { method: "POST", body: JSON.stringify(payload) }),
+  updateServer: (id: string, payload: Omit<Server, "id" | "status" | "maintenance" | "lastCheckAt" | "lastCheckError">) =>
+    request<Server>(`/servers/${id}`, { method: "PATCH", body: JSON.stringify(payload) }),
+  deleteServer: (id: string) => request<{ ok: boolean }>(`/servers/${id}`, { method: "DELETE" }),
+  checkServer: (id: string) => request<Server>(`/servers/${id}/check`, { method: "POST" }),
+  checkAllServers: () => request<Server[]>("/servers/check-all", { method: "POST" }),
+  toggleServerMaintenance: (id: string, enabled: boolean) =>
+    request<Server>(`/servers/${id}/maintenance`, { method: "POST", body: JSON.stringify({ enabled }) }),
+
+  // Domains
+  listDomains: () => request<Domain[]>("/domains"),
+  createDomain: (payload: { name: string; serverId?: string; quotaBytes?: number; catchAll?: boolean }) =>
+    request<Domain>("/domains", { method: "POST", body: JSON.stringify(payload) }),
+  updateDomain: (id: string, payload: { serverId?: string; quotaBytes?: number; catchAll?: boolean }) =>
+    request<Domain>(`/domains/${id}`, { method: "PATCH", body: JSON.stringify(payload) }),
+  deleteDomain: (id: string) => request<{ ok: boolean }>(`/domains/${id}`, { method: "DELETE" }),
+  verifyDomain: (id: string) => request<Domain>(`/domains/${id}/verify`, { method: "POST" }),
+  validateDomain: (id: string) => request<Domain>(`/domains/${id}/validate`, { method: "POST" }),
+
+  // Mailboxes + aliases
+  engineStatus: () => request<{ configured: boolean; name: string }>("/mailboxes/engine"),
+  listMailboxes: (domainId: string) => request<Mailbox[]>(`/domains/${domainId}/mailboxes`),
+  createMailbox: (
+    domainId: string,
+    payload: { local: string; displayName?: string; quotaBytes?: number; password?: string },
+  ) => request<Mailbox>(`/domains/${domainId}/mailboxes`, { method: "POST", body: JSON.stringify(payload) }),
+  updateMailbox: (id: string, payload: { displayName?: string; quotaBytes?: number; password?: string }) =>
+    request<Mailbox>(`/mailboxes/${id}`, { method: "PATCH", body: JSON.stringify(payload) }),
+  deleteMailbox: (id: string) => request<{ ok: boolean }>(`/mailboxes/${id}`, { method: "DELETE" }),
+  listAliases: (domainId: string) => request<Alias[]>(`/domains/${domainId}/aliases`),
+  createAlias: (domainId: string, payload: { source: string; destination: string; forwarding?: boolean }) =>
+    request<Alias>(`/domains/${domainId}/aliases`, { method: "POST", body: JSON.stringify(payload) }),
+  deleteAlias: (id: string) => request<{ ok: boolean }>(`/aliases/${id}`, { method: "DELETE" }),
+
+  // Settings, monitoring, audit, jobs
+  getSettings: () => request<Record<string, unknown>>("/settings"),
+  updateSettings: (payload: Record<string, unknown>) => request<Record<string, unknown>>("/settings", { method: "PATCH", body: JSON.stringify(payload) }),
+  dashboard: () => request<DashboardSummary>("/dashboard"),
+  listAudit: (params?: { action?: string; page?: number; perPage?: number }) => {
+    const q = new URLSearchParams();
+    if (params?.action) q.set("action", params.action);
+    if (params?.page) q.set("page", String(params.page));
+    if (params?.perPage) q.set("perPage", String(params.perPage));
+    const suffix = q.size > 0 ? `?${q.toString()}` : "";
+    return request<AuditEntry[]>(`/audit${suffix}`);
+  },
+  listJobs: () => request<Job[]>("/jobs"),
+};
+
+export default api;
