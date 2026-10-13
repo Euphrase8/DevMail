@@ -92,37 +92,87 @@ tests yet.
 
 ## 2. Gap analysis
 
-### A. Data we collect but never expose (write-only)
-- `server_health` — written on every server check; no read endpoint.
-- `domain_check_results` — written on every `validate`; no history endpoint.
-- `jobs` — `GET` only; no way to **enqueue / cancel / retry**.
+> Audited against the live tree (routes, `store.tsx`, `api.ts`, `router.go`,
+> migrations). Tags: `[x]` closed, `[~]` partially closed, `[ ]` open. Re-audited
+> 2026-10-13 after Phases 9–10.
 
-### B. Frontend screens with no backend at all (currently fixtures)
-`dns`, `providers`, `routing`, `backups`, `notifications`, and webmail (URL launcher only).
+### A. Data we collect but never exposed (write-only)  `[x]`
+- `[x]` `server_health` → `GET /servers/:id/health` (Phase 9).
+- `[x]` `domain_check_results` → `GET /domains/:id/checks` (Phase 9).
+- `[x]` `jobs` → `POST /jobs` (enqueue), `POST /jobs/:id/retry|cancel` (Phase 9).
 
-### C. Implemented-but-stubbed
-- **Mail engine:** `NoopEngine` only — mailbox/alias mutations do not provision;
-  `GET /mailboxes/engine` reports *unmanaged*.
-- **Provisioning worker:** loop runs, but every job kind is a no-op and nothing
-  enqueues jobs.
+### B. Frontend screens / operations not backed by the API
+Every frontend route and whether it reads/writes the real API was enumerated.
+`ResourcePage` renders **sample** rows and its create/edit/delete/verify actions
+call in-memory `save`/`remove`/`simulateCheck` only — never the API.
 
-### D. Auth & security gaps
+- `[x]` **DNS records** (`/dns`) — real (`DnsPage`, Phase 10).
+- `[x]` **DNS providers** (`/providers`) — real (`ProvidersPage`, Phase 10).
+- `[x]` **Provisioning jobs** (`/jobs`) — real (`JobsPage`, Phase 9).
+- `[x]` **Overview** (`/`) — real (`dashboard`).
+- `[ ]` **Servers** (`/servers`) — **read live, write sample.** List is hydrated
+  from `GET /servers`, but create/edit/delete/check/check-all/maintenance still
+  call `save`/`simulateCheck`. Backend endpoints already exist and are unused.
+- `[ ]` **Domains** (`/domains`) — **read live, write sample.** Create/edit/delete/
+  verify/validate not wired though `POST|PATCH|DELETE /domains`, `/verify`,
+  `/validate` exist.
+- `[ ]` **Mailboxes** (`/mailboxes`) — **fully sample.** Backend is domain-scoped
+  (`GET|POST /domains/:id/mailboxes`, `PATCH|DELETE /mailboxes/:id`) and unused;
+  the screen has no domain selector.
+- `[ ]` **Aliases** (`/aliases`) — **fully sample.** Backend domain-scoped
+  (`GET|POST /domains/:id/aliases`, `DELETE /aliases/:id`) and unused.
+- `[ ]` **Users & access** (`/users`) — **read live, write sample.** Create/update/
+  delete not wired though `POST|PATCH|DELETE /users` exist.
+- `[ ]` **Settings** (`/settings`) — **fully sample.** `GET|PATCH /settings` exist
+  and are unused; the page only mutates the in-memory store.
+- `[ ]` **Audit log** (`/audit`) — **read live (page 1 only).** List is hydrated but
+  the `action` filter + pagination the backend supports are not exposed.
+- `[ ]` **Monitoring** (`/monitoring`) — partial: server-health panel is live; the
+  delivery/queue/spam/TLS metric tiles remain sample.
+- `[ ]` **Routing** (`/routing`), **Backups** (`/backups`),
+  **Notifications** (`/notifications`) — fully sample; no backend module yet (Phase 12).
+- `[~]` **Webmail** (`/webmail`) — external URL launcher; no backend needed (its
+  target URL comes from settings, which is itself unwired above).
+- `[ ]` **Read fidelity:** even "read-live" lists are lossy — `store.tsx` maps domain
+  mailbox/storage/provider columns and server usage/domain counts to placeholders
+  (`"0"`, `"Live / check"`, `provider:"manual"`); user `scope`/`lastLogin` are stubbed.
+  Real per-row aggregates need backend counts.
+- `[ ]` **Shell chrome:** workspace name (`"Acme workspace"`), the ⌘K search index,
+  and the header notification/account panels render sample data.
+
+### C. Implemented-but-stubbed  `[ ]`
+- **Mail engine:** `main.go` still injects `mailboxes.NoopEngine{}`; mailbox/alias
+  mutations persist DB rows but do not provision; `GET /mailboxes/engine` reports
+  *unmanaged*.
+- **Provisioning worker:** the Phase 9 worker executes real enqueued jobs, but no
+  mailbox/alias/domain mutation enqueues a job automatically.
+
+### D. Auth & security gaps  `[ ]`
 - No MFA/TOTP (the `totp_secret` column exists but is unused).
 - No CSRF protection on cookie-authenticated mutations.
-- Cookie `Secure` hardcoded off; no session rotation; no "revoke all sessions".
+- Cookie `Secure` hardcoded `false` (`auth/handler.go` Login/Logout); no session
+  rotation; no "revoke all sessions".
 - No self-service password change or admin-initiated reset.
 - In-memory rate limiting only; no account lockout.
-- Audit misses login success/failure/logout; no filters or export.
+- Audit records **no** login success/failure/logout or setup events (the auth
+  package never calls `audit.Record`); no export.
 
 ### E. Cross-cutting / infra
-- Single migration (`0001`), no down migrations, minimal seeding.
-- No OpenAPI spec; no filter/sort/search or bulk ops; `meta.total = len` (no real pagination).
-- No metrics/Prometheus endpoint; no liveness-vs-readiness split.
-- No Dockerfile/CI (Docker not installed on this machine — artifacts documented only).
+- `[~]` Migrations: `0001_init` + `0002_dns` exist; still **no down migrations**
+  and minimal seeding.
+- `[~]` Pagination: `jobs` and `audit` return real `meta{page,perPage,total}`;
+  `mailboxes`, `aliases`, `servers`, `domains`, `users`, `providers` still report
+  `total = len` with no `page`/`perPage`; no filter/sort/search or bulk ops.
+- `[ ]` No OpenAPI spec.
+- `[ ]` No metrics/Prometheus endpoint; no liveness-vs-readiness split.
+- `[ ]` No Dockerfile/CI (Docker not installed on this machine — artifacts documented only).
 
 ### F. Contract notes
-- Aliases: create/delete only — **no update**.
+- Aliases: create/delete only — **no update** endpoint.
 - Users list: no pagination / no self-delete guard beyond the super_admin SQL block.
+- Mailboxes/aliases have **no global list** — domain-scoped only, so a workspace-wide
+  view needs either a selector or a new aggregate endpoint.
+- `jobs` payload/result are free-form JSON (`unknown` in the client); no schema.
 
 ---
 
@@ -246,11 +296,19 @@ works; login events appear in `/audit`.
 ---
 
 ### Phase 14 — Frontend wiring for all prior phases  `[ ]`
+**Goal:** no screen may render fabricated data or run a sample mutation.
 **Tasks**
 - [ ] Extend `frontend/src/lib/api.ts` with every new endpoint (typed).
-- [ ] Replace fixture data in `dns`, `providers`, `routing`, `backups`,
-      `notifications`, and monitoring detail with real API reads.
-- [ ] MFA + password + session screens.
+- [ ] Replace `ResourcePage` sample rendering + in-memory `save`/`remove` for
+      **servers, domains, users** with real `create/update/delete` calls (endpoints
+      already exist); wire `check`, `check-all`, `maintenance`, domain `verify`/`validate`.
+- [ ] Wire **mailboxes** and **aliases** to their domain-scoped endpoints
+      (add a domain selector, or a new aggregate list endpoint — see [§ F](#f-contract-notes)).
+- [ ] Wire **settings** load/save to `GET|PATCH /settings`.
+- [ ] Wire **audit** `action` filter + pagination UI.
+- [ ] Replace fixture data in `routing`, `backups`, `notifications`, and the
+      monitoring metric tiles with real API reads (depends on Phase 12).
+- [ ] MFA + password + session screens (depends on Phase 13).
 - [ ] `npx tsc --noEmit` + `npm test` clean; verify each screen live.
 
 ---
@@ -291,3 +349,4 @@ works; login events appear in `/audit`.
 | 2026-10-13 | 9 | Telemetry surfaced: server health history, domain check history, jobs enqueue/retry/cancel + mutex worker | `go vet ./...` + `go test ./...` pass (dns 2.75s, providers 2.73s, secretbox 1.00s); live e2e on `:8095` green | `4ebb81c` |
 | 2026-10-13 | 10 | DNS records + provider adapters: secretbox, migration `0002_dns`, `internal/providers` (manual + Cloudflare), `internal/dns` + DKIM | live e2e: plan 6→7 records, DKIM pubLen 392, manual apply, jobs `succeeded` | `4ebb81c` |
 | 2026-10-13 | 9/10 | Frontend wiring: api.ts methods, `dns-page`, `providers-page`, `jobs-page`, `server-health-panel`, route wiring | `npx tsc --noEmit` clean; `npm test` 18/18; `npm run build` ok; `eslint --fix` clean | `4ebb81c` |
+| 2026-10-13 | audit | Re-audited gap analysis A–F against live tree; captured omitted gaps (servers/domains/users write-side wiring, mailboxes/aliases fully sample, settings+audit wiring, monitoring tiles) and corrected § E migration/pagination status; expanded Phase 14 | full-route enumeration vs `store.tsx`/`api.ts`/`router.go`; `auth` package has no `audit.Record`; `main.go` still `NoopEngine` | pending |
