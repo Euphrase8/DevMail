@@ -167,6 +167,45 @@ func (s *Service) Check(ctx context.Context, id string) (*Server, error) {
 	return scanServer(row)
 }
 
+// HealthPoint is a stored connectivity sample for a server.
+type HealthPoint struct {
+	Status    string `json:"status"`
+	LatencyMs int64  `json:"latencyMs"`
+	Addr      string `json:"addr"`
+	CheckedAt string `json:"checkedAt"`
+}
+
+// HealthHistory returns recent health samples for a server, newest first.
+func (s *Service) HealthHistory(ctx context.Context, id string, limit int) ([]*HealthPoint, int, error) {
+	if limit <= 0 || limit > 200 {
+		limit = 50
+	}
+	if _, err := s.Get(ctx, id); err != nil {
+		return nil, 0, err
+	}
+	var total int
+	if err := s.pool.QueryRow(ctx, `SELECT COUNT(*) FROM server_health WHERE server_id=$1`, id).Scan(&total); err != nil {
+		return nil, 0, err
+	}
+	rows, err := s.pool.Query(ctx, `
+		SELECT status, latency_ms, addr,
+		       to_char(checked_at AT TIME ZONE 'UTC','YYYY-MM-DD"T"HH24:MI:SS"Z"')
+		FROM server_health WHERE server_id=$1 ORDER BY checked_at DESC LIMIT $2`, id, limit)
+	if err != nil {
+		return nil, 0, err
+	}
+	defer rows.Close()
+	var out []*HealthPoint
+	for rows.Next() {
+		var p HealthPoint
+		if err := rows.Scan(&p.Status, &p.LatencyMs, &p.Addr, &p.CheckedAt); err != nil {
+			return nil, 0, err
+		}
+		out = append(out, &p)
+	}
+	return out, total, rows.Err()
+}
+
 // CheckAll probes every non-disabled server concurrently.
 func (s *Service) CheckAll(ctx context.Context) ([]*Server, error) {
 	all, err := s.List(ctx)
@@ -259,6 +298,7 @@ func (h *Handler) RegisterRoutes(r *gin.RouterGroup, auth gin.HandlerFunc) {
 	servers.POST("", h.Create)
 	servers.POST("/check-all", h.CheckAll)
 	servers.POST("/:id/check", h.Check)
+	servers.GET("/:id/health", h.Health)
 	servers.PATCH("/:id", h.Update)
 	servers.DELETE("/:id", h.Delete)
 	servers.POST("/:id/maintenance", h.ToggleMaintenance)
@@ -340,6 +380,41 @@ func (h *Handler) CheckAll(c *gin.Context) {
 		data[i] = all[i]
 	}
 	httpapi.RespondList(c, data, 1, len(all), len(all))
+}
+
+// Health handles GET /api/v1/servers/:id/health?limit=.
+func (h *Handler) Health(c *gin.Context) {
+	limit := 50
+	if v := c.Query("limit"); v != "" {
+		if n := 0; len(v) > 0 {
+			for _, r := range v {
+				if r < '0' || r > '9' {
+					n = 0
+					break
+				}
+				n = n*10 + int(r-'0')
+			}
+			if n > 0 {
+				limit = n
+			}
+		}
+	}
+	ctx, cancel := context.WithTimeout(c.Request.Context(), 10*time.Second)
+	defer cancel()
+	points, total, err := h.svc.HealthHistory(ctx, c.Param("id"), limit)
+	if err != nil {
+		if errors.Is(err, errNotFound) {
+			httpapi.Fail(c, http.StatusNotFound, httpapi.ErrNotFound, "Server not found.")
+			return
+		}
+		httpapi.InternalError(c)
+		return
+	}
+	data := make([]any, len(points))
+	for i := range points {
+		data[i] = points[i]
+	}
+	httpapi.RespondList(c, data, 1, limit, total)
 }
 
 // Update handles PATCH /api/v1/servers/:id.

@@ -262,6 +262,41 @@ func (s *Service) Validate(ctx context.Context, id string) (*Domain, error) {
 	return d, nil
 }
 
+// CheckHistory returns stored DNS validation results for a domain, newest
+// first, optionally filtered by check kind.
+func (s *Service) CheckHistory(ctx context.Context, id, kind string, limit int) ([]Check, int, error) {
+	if limit <= 0 || limit > 500 {
+		limit = 100
+	}
+	if _, err := s.Get(ctx, id); err != nil {
+		return nil, 0, err
+	}
+	var total int
+	if err := s.pool.QueryRow(ctx,
+		`SELECT COUNT(*) FROM domain_check_results WHERE domain_id=$1 AND ($2='' OR kind=$2)`, id, kind).Scan(&total); err != nil {
+		return nil, 0, err
+	}
+	rows, err := s.pool.Query(ctx, `
+		SELECT kind, ok, COALESCE(detail->>'detail',''),
+		       to_char(checked_at AT TIME ZONE 'UTC','YYYY-MM-DD"T"HH24:MI:SS"Z"')
+		FROM domain_check_results
+		WHERE domain_id=$1 AND ($2='' OR kind=$2)
+		ORDER BY checked_at DESC LIMIT $3`, id, kind, limit)
+	if err != nil {
+		return nil, 0, err
+	}
+	defer rows.Close()
+	var out []Check
+	for rows.Next() {
+		var c Check
+		if err := rows.Scan(&c.Kind, &c.OK, &c.Detail, &c.CheckedAt); err != nil {
+			return nil, 0, err
+		}
+		out = append(out, c)
+	}
+	return out, total, rows.Err()
+}
+
 // Verify checks the ownership TXT token and marks the domain verified.
 func (s *Service) Verify(ctx context.Context, id string) (*Domain, error) {
 	d, err := s.Get(ctx, id)
@@ -352,6 +387,7 @@ func (h *Handler) RegisterRoutes(r *gin.RouterGroup, auth gin.HandlerFunc) {
 	domains.POST("", h.Create)
 	domains.POST("/:id/verify", h.Verify)
 	domains.POST("/:id/validate", h.Validate)
+	domains.GET("/:id/checks", h.Checks)
 	domains.PATCH("/:id", h.Update)
 	domains.DELETE("/:id", h.Delete)
 }
@@ -430,6 +466,41 @@ func (h *Handler) Validate(c *gin.Context) {
 		return
 	}
 	httpapi.Respond(c, http.StatusOK, d)
+}
+
+// Checks handles GET /api/v1/domains/:id/checks?kind=&limit=.
+func (h *Handler) Checks(c *gin.Context) {
+	limit := 100
+	if v := c.Query("limit"); v != "" {
+		n := 0
+		ok := len(v) > 0
+		for _, r := range v {
+			if r < '0' || r > '9' {
+				ok = false
+				break
+			}
+			n = n*10 + int(r-'0')
+		}
+		if ok && n > 0 {
+			limit = n
+		}
+	}
+	ctx, cancel := context.WithTimeout(c.Request.Context(), 10*time.Second)
+	defer cancel()
+	checks, total, err := h.svc.CheckHistory(ctx, c.Param("id"), c.Query("kind"), limit)
+	if err != nil {
+		if errors.Is(err, errNotFound) {
+			httpapi.Fail(c, http.StatusNotFound, httpapi.ErrNotFound, "Domain not found.")
+			return
+		}
+		httpapi.InternalError(c)
+		return
+	}
+	data := make([]any, len(checks))
+	for i := range checks {
+		data[i] = checks[i]
+	}
+	httpapi.RespondList(c, data, 1, limit, total)
 }
 
 // Delete handles DELETE /api/v1/domains/:id.

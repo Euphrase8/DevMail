@@ -36,7 +36,9 @@ async function request<T>(path: string, init?: RequestInit): Promise<T> {
   }
 
   if (!res.ok) {
-    const err = (body as { error?: { code?: string; message?: string; fields?: Record<string, unknown> } })?.error;
+    const err = (
+      body as { error?: { code?: string; message?: string; fields?: Record<string, unknown> } }
+    )?.error;
     throw new ApiError(
       res.status,
       err?.code ?? "internal",
@@ -46,6 +48,32 @@ async function request<T>(path: string, init?: RequestInit): Promise<T> {
   }
 
   return (body as { data: T }).data;
+}
+
+async function requestFull<T>(path: string, init?: RequestInit): Promise<T> {
+  const res = await fetch(`${BASE}${path}`, {
+    ...init,
+    credentials: "include",
+    headers: { "Content-Type": "application/json", ...(init?.headers ?? {}) },
+  });
+  let body: unknown = null;
+  try {
+    body = await res.json();
+  } catch {
+    body = null;
+  }
+  if (!res.ok) {
+    const err = (
+      body as { error?: { code?: string; message?: string; fields?: Record<string, unknown> } }
+    )?.error;
+    throw new ApiError(
+      res.status,
+      err?.code ?? "internal",
+      err?.message ?? `Request failed (${res.status}).`,
+      err?.fields,
+    );
+  }
+  return body as T;
 }
 
 export type User = {
@@ -112,8 +140,22 @@ export type Alias = {
 };
 
 export type DashboardSummary = {
-  servers: { total: number; healthy: number; degraded: number; offline: number; pending: number; maintenance: number };
-  domains: { total: number; verified: number; active: number; degraded: number; pending: number; suspended: number };
+  servers: {
+    total: number;
+    healthy: number;
+    degraded: number;
+    offline: number;
+    pending: number;
+    maintenance: number;
+  };
+  domains: {
+    total: number;
+    verified: number;
+    active: number;
+    degraded: number;
+    pending: number;
+    suspended: number;
+  };
   mailboxes: number;
   aliases: number;
   users: number;
@@ -138,9 +180,46 @@ export type Job = {
   error: string;
   attempts: number;
   maxAttempts: number;
+  payload?: unknown;
+  result?: unknown;
+  startedAt?: string;
   createdAt: string;
   finishedAt: string;
 };
+
+export type ServerHealthPoint = {
+  status: string;
+  latencyMs: number;
+  addr: string;
+  checkedAt: string;
+};
+
+export type DnsRecord = {
+  id: string;
+  type: string;
+  name: string;
+  value: string;
+  ttl: number;
+  priority: number;
+  purpose: string;
+  status: string;
+  detail: string;
+  appliedAt: string;
+};
+
+export type DnsProvider = {
+  id: string;
+  name: string;
+  kind: string;
+  zone: string;
+  status: string;
+  hasToken: boolean;
+  lastVerifiedAt: string;
+  lastVerifyError: string;
+  createdAt: string;
+};
+
+export type JobResult = { type: string; name: string; status: string; detail: string };
 
 export const api = {
   // Health + auth
@@ -161,22 +240,34 @@ export const api = {
 
   // Servers
   listServers: () => request<Server[]>("/servers"),
-  createServer: (payload: Omit<Server, "id" | "status" | "maintenance" | "lastCheckAt" | "lastCheckError">) =>
-    request<Server>("/servers", { method: "POST", body: JSON.stringify(payload) }),
-  updateServer: (id: string, payload: Omit<Server, "id" | "status" | "maintenance" | "lastCheckAt" | "lastCheckError">) =>
-    request<Server>(`/servers/${id}`, { method: "PATCH", body: JSON.stringify(payload) }),
+  createServer: (
+    payload: Omit<Server, "id" | "status" | "maintenance" | "lastCheckAt" | "lastCheckError">,
+  ) => request<Server>("/servers", { method: "POST", body: JSON.stringify(payload) }),
+  updateServer: (
+    id: string,
+    payload: Omit<Server, "id" | "status" | "maintenance" | "lastCheckAt" | "lastCheckError">,
+  ) => request<Server>(`/servers/${id}`, { method: "PATCH", body: JSON.stringify(payload) }),
   deleteServer: (id: string) => request<{ ok: boolean }>(`/servers/${id}`, { method: "DELETE" }),
   checkServer: (id: string) => request<Server>(`/servers/${id}/check`, { method: "POST" }),
   checkAllServers: () => request<Server[]>("/servers/check-all", { method: "POST" }),
   toggleServerMaintenance: (id: string, enabled: boolean) =>
-    request<Server>(`/servers/${id}/maintenance`, { method: "POST", body: JSON.stringify({ enabled }) }),
+    request<Server>(`/servers/${id}/maintenance`, {
+      method: "POST",
+      body: JSON.stringify({ enabled }),
+    }),
 
   // Domains
   listDomains: () => request<Domain[]>("/domains"),
-  createDomain: (payload: { name: string; serverId?: string; quotaBytes?: number; catchAll?: boolean }) =>
-    request<Domain>("/domains", { method: "POST", body: JSON.stringify(payload) }),
-  updateDomain: (id: string, payload: { serverId?: string; quotaBytes?: number; catchAll?: boolean }) =>
-    request<Domain>(`/domains/${id}`, { method: "PATCH", body: JSON.stringify(payload) }),
+  createDomain: (payload: {
+    name: string;
+    serverId?: string;
+    quotaBytes?: number;
+    catchAll?: boolean;
+  }) => request<Domain>("/domains", { method: "POST", body: JSON.stringify(payload) }),
+  updateDomain: (
+    id: string,
+    payload: { serverId?: string; quotaBytes?: number; catchAll?: boolean },
+  ) => request<Domain>(`/domains/${id}`, { method: "PATCH", body: JSON.stringify(payload) }),
   deleteDomain: (id: string) => request<{ ok: boolean }>(`/domains/${id}`, { method: "DELETE" }),
   verifyDomain: (id: string) => request<Domain>(`/domains/${id}/verify`, { method: "POST" }),
   validateDomain: (id: string) => request<Domain>(`/domains/${id}/validate`, { method: "POST" }),
@@ -187,18 +278,34 @@ export const api = {
   createMailbox: (
     domainId: string,
     payload: { local: string; displayName?: string; quotaBytes?: number; password?: string },
-  ) => request<Mailbox>(`/domains/${domainId}/mailboxes`, { method: "POST", body: JSON.stringify(payload) }),
-  updateMailbox: (id: string, payload: { displayName?: string; quotaBytes?: number; password?: string }) =>
-    request<Mailbox>(`/mailboxes/${id}`, { method: "PATCH", body: JSON.stringify(payload) }),
+  ) =>
+    request<Mailbox>(`/domains/${domainId}/mailboxes`, {
+      method: "POST",
+      body: JSON.stringify(payload),
+    }),
+  updateMailbox: (
+    id: string,
+    payload: { displayName?: string; quotaBytes?: number; password?: string },
+  ) => request<Mailbox>(`/mailboxes/${id}`, { method: "PATCH", body: JSON.stringify(payload) }),
   deleteMailbox: (id: string) => request<{ ok: boolean }>(`/mailboxes/${id}`, { method: "DELETE" }),
   listAliases: (domainId: string) => request<Alias[]>(`/domains/${domainId}/aliases`),
-  createAlias: (domainId: string, payload: { source: string; destination: string; forwarding?: boolean }) =>
-    request<Alias>(`/domains/${domainId}/aliases`, { method: "POST", body: JSON.stringify(payload) }),
+  createAlias: (
+    domainId: string,
+    payload: { source: string; destination: string; forwarding?: boolean },
+  ) =>
+    request<Alias>(`/domains/${domainId}/aliases`, {
+      method: "POST",
+      body: JSON.stringify(payload),
+    }),
   deleteAlias: (id: string) => request<{ ok: boolean }>(`/aliases/${id}`, { method: "DELETE" }),
 
   // Settings, monitoring, audit, jobs
   getSettings: () => request<Record<string, unknown>>("/settings"),
-  updateSettings: (payload: Record<string, unknown>) => request<Record<string, unknown>>("/settings", { method: "PATCH", body: JSON.stringify(payload) }),
+  updateSettings: (payload: Record<string, unknown>) =>
+    request<Record<string, unknown>>("/settings", {
+      method: "PATCH",
+      body: JSON.stringify(payload),
+    }),
   dashboard: () => request<DashboardSummary>("/dashboard"),
   listAudit: (params?: { action?: string; page?: number; perPage?: number }) => {
     const q = new URLSearchParams();
@@ -209,6 +316,51 @@ export const api = {
     return request<AuditEntry[]>(`/audit${suffix}`);
   },
   listJobs: () => request<Job[]>("/jobs"),
+  enqueueJob: (payload: { kind: string; payload?: unknown }) =>
+    request<Job>("/jobs", { method: "POST", body: JSON.stringify(payload) }),
+  retryJob: (id: string) => request<Job>(`/jobs/${id}/retry`, { method: "POST" }),
+  cancelJob: (id: string) => request<Job>(`/jobs/${id}/cancel`, { method: "POST" }),
+
+  // Phase 9: history
+  getServerHealth: (id: string, limit = 50) =>
+    request<ServerHealthPoint[]>(`/servers/${id}/health?limit=${limit}`),
+  getDomainChecks: (id: string, params?: { kind?: string; limit?: number }) => {
+    const q = new URLSearchParams();
+    if (params?.kind) q.set("kind", params.kind);
+    if (params?.limit) q.set("limit", String(params.limit));
+    const suffix = q.size > 0 ? `?${q.toString()}` : "";
+    return request<DomainCheck[]>(`/domains/${id}/checks${suffix}`);
+  },
+
+  // Phase 10: DNS records + providers
+  listDnsRecords: (domainId: string) => request<DnsRecord[]>(`/domains/${domainId}/dns-records`),
+  generateDkim: (domainId: string, selector = "default") =>
+    request<{ selector: string; publicKey: string; record: DnsRecord }>(
+      `/domains/${domainId}/dkim`,
+      {
+        method: "POST",
+        body: JSON.stringify({ selector }),
+      },
+    ),
+  applyDnsRecords: (domainId: string, providerId: string) =>
+    requestFull<{ data: DnsRecord[]; results: JobResult[] }>(
+      `/domains/${domainId}/dns-records/apply`,
+      {
+        method: "POST",
+        body: JSON.stringify({ providerId }),
+      },
+    ),
+  listProviders: () => request<DnsProvider[]>("/providers"),
+  createProvider: (payload: { name: string; kind: string; zone?: string; token?: string }) =>
+    request<DnsProvider>("/providers", { method: "POST", body: JSON.stringify(payload) }),
+  updateProvider: (
+    id: string,
+    payload: { name: string; kind: string; zone?: string; token?: string },
+  ) => request<DnsProvider>(`/providers/${id}`, { method: "PATCH", body: JSON.stringify(payload) }),
+  deleteProvider: (id: string) =>
+    request<{ ok: boolean }>(`/providers/${id}`, { method: "DELETE" }),
+  verifyProvider: (id: string) =>
+    request<DnsProvider>(`/providers/${id}/verify`, { method: "POST" }),
 };
 
 export default api;

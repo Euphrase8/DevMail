@@ -16,6 +16,10 @@ type Config struct {
 	AllowPrivateNetworks bool
 	Env                  string
 
+	// SecretKey is the passphrase used to derive the key that encrypts
+	// credentials and private keys at rest. Override in production.
+	SecretKey string
+
 	// Timeouts used by connectivity/DNS checks.
 	DialTimeout    time.Duration
 	ResolverTimeout time.Duration
@@ -28,6 +32,7 @@ func Load() Config {
 		DatabaseURL:          getenv("DATABASE_URL", "postgres://postgres:1508@127.0.0.1:5432/devmail?sslmode=disable"),
 		AllowPrivateNetworks: getenv("ALLOW_PRIVATE_NETWORKS", "false") == "true",
 		Env:                  getenv("APP_ENV", "development"),
+		SecretKey:            getenv("SECRET_KEY", "devmail-insecure-dev-key-change-me"),
 		DialTimeout:          5 * time.Second,
 		ResolverTimeout:      5 * time.Second,
 	}

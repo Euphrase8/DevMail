@@ -12,11 +12,13 @@ import (
 	"github.com/Euphrase8/DevMail/backend/internal/audit"
 	"github.com/Euphrase8/DevMail/backend/internal/auth"
 	"github.com/Euphrase8/DevMail/backend/internal/config"
+	"github.com/Euphrase8/DevMail/backend/internal/dns"
 	"github.com/Euphrase8/DevMail/backend/internal/domains"
 	"github.com/Euphrase8/DevMail/backend/internal/httpapi"
 	"github.com/Euphrase8/DevMail/backend/internal/jobs"
 	"github.com/Euphrase8/DevMail/backend/internal/mailboxes"
 	"github.com/Euphrase8/DevMail/backend/internal/monitoring"
+	"github.com/Euphrase8/DevMail/backend/internal/providers"
 	"github.com/Euphrase8/DevMail/backend/internal/servers"
 	"github.com/Euphrase8/DevMail/backend/internal/settings"
 	"github.com/gin-gonic/gin"
@@ -69,10 +71,13 @@ func NewRouter(opts Options) *gin.Engine {
 	servers.NewHandler(opts.Pool, rec, opts.Config.AllowPrivateNetworks).RegisterRoutes(v1, authMw)
 	domains.NewHandler(opts.Pool, rec).RegisterRoutes(v1, authMw)
 	mailboxes.NewHandler(opts.Pool, rec, opts.MailEngine).RegisterRoutes(v1, authMw)
+	providersHandler := providers.NewHandler(opts.Pool, opts.Config.SecretKey, rec)
+	providersHandler.RegisterRoutes(v1, authMw)
+	dns.NewHandler(opts.Pool, rec, providersHandler.Service(), opts.Config.SecretKey).RegisterRoutes(v1, authMw)
 	settings.NewHandler(opts.Pool).RegisterRoutes(v1, authMw)
 	monitoring.NewHandler(opts.Pool).RegisterRoutes(v1, authMw)
 	audit.NewHandler(opts.Pool).RegisterRoutes(v1, authMw)
-	jobs.NewHandler(opts.Pool, opts.Logger).RegisterRoutes(v1, authMw)
+	jobs.NewHandler(opts.Pool, opts.Logger, rec).RegisterRoutes(v1, authMw)
 
 	return r
 }
