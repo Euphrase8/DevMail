@@ -63,7 +63,7 @@ listener is `:7000`; dev DB is PostgreSQL (`postgres`/`1508`, database `devmail`
 | GET  | `/api/v1/jobs` | list (paged) |
 | POST | `/api/v1/jobs` | enqueue `{kind, payload}` |
 | POST | `/api/v1/jobs/:id/retry` | re-run a failed job |
-| POST | `/api/v1/jobs/:id/cancel` | cancel a 4ebb81c job |
+| POST | `/api/v1/jobs/:id/cancel` | cancel a pending job |
 | GET  | `/api/v1/servers/:id/health` | `?limit=` health history |
 | GET  | `/api/v1/domains/:id/checks` | `?kind=&limit=` check history |
 | GET  | `/api/v1/providers` | list DNS providers |
