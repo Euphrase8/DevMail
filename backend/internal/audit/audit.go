@@ -63,7 +63,7 @@ type Entry struct {
 // List returns audit entries, newest first, with pagination.
 func (r *Recorder) List(ctx context.Context, action string, limit, offset int) ([]Entry, int, error) {
 	var total int
-	if err := r.pool.QueryRow(ctx, `SELECT COUNT(*) FROM audit_log`).Scan(&total); err != nil {
+	if err := r.pool.QueryRow(ctx, `SELECT COUNT(*) FROM audit_log WHERE ($1='' OR action=$1)`, action).Scan(&total); err != nil {
 		return nil, 0, err
 	}
 	rows, err := r.pool.Query(ctx, `

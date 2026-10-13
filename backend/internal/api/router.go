@@ -56,6 +56,8 @@ func NewRouter(opts Options) *gin.Engine {
 
 	v1 := r.Group("/api/v1")
 
+	v1.Use(auth.CSRF(opts.Config.SecretKey, !opts.Config.IsDevelopment()))
+	v1.GET("/auth/csrf", func(c *gin.Context) {})
 	// Public health + L7 checks.
 	v1.GET("/health", func(c *gin.Context) {
 		ctx, cancel := context.WithTimeout(c.Request.Context(), 3*time.Second)
@@ -73,7 +75,7 @@ func NewRouter(opts Options) *gin.Engine {
 	})
 
 	// Auth module owns its own public + protected routes.
-	auth.Register(v1, opts.Pool, authMw)
+	auth.Register(v1, opts.Pool, authMw, opts.Config.SecretKey, !opts.Config.IsDevelopment())
 
 	// One jobs service is shared by the HTTP handler and the provisioning
 	// consumers so both operate on the same registry and worker.

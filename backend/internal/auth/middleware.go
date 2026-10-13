@@ -38,8 +38,9 @@ func RequireAuth(svc *Service) gin.HandlerFunc {
 			httpapi.Fail(c, http.StatusUnauthorized, httpapi.ErrUnauthorized, "Session is invalid or expired.")
 			return
 		}
+		_, _ = svc.pool.Exec(ctx, `UPDATE sessions SET last_seen_at=now() WHERE token_hash=$1`, HashSessionToken(token))
 		c.Set(userKey, user)
-		c.Next()
+		MutationPolicy()(c)
 	}
 }
 

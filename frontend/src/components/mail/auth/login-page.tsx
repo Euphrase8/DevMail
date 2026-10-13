@@ -70,10 +70,6 @@ export function LoginPage() {
       );
       return;
     }
-    if (mode === "mfa") {
-      setMessage("MFA enrollment is configured during administrator setup.");
-      return;
-    }
 
     const form = e.currentTarget;
     const fd = new FormData(form);
@@ -85,8 +81,9 @@ export function LoginPage() {
     try {
       if (mode === "bootstrap") {
         await api.setup({ email, name, password });
-      } else {
         await api.login({ email, password });
+      } else {
+        await api.login({ email, password, code: String(fd.get("code") ?? "") });
       }
       queryClient.invalidateQueries({ queryKey: ["session"] });
       queryClient.invalidateQueries({ queryKey: ["health"] });
@@ -168,39 +165,12 @@ export function LoginPage() {
                   />
                 </label>
               )}
-              {mode === "mfa" && (
+              {mode === "login" && (
                 <label className="block">
-                  Verification code
-                  <input
-                    className="font-mono tracking-[0.4em]"
-                    pattern="[0-9]{6}"
-                    inputMode="numeric"
-                    maxLength={6}
-                    required
-                    placeholder="000000"
-                    autoComplete="one-time-code"
-                  />
+                  Authenticator or recovery code (if enabled)
+                  <input name="code" autoComplete="one-time-code" />
                 </label>
               )}
-
-              {mode === "login" && (
-                <div className="flex items-center justify-between">
-                  <label className="flex items-center gap-2">
-                    <input type="checkbox" />
-                    Remember me
-                  </label>
-                  <Button
-                    variant="ghost"
-                    type="button"
-                    size="sm"
-                    className="text-xs text-muted-foreground"
-                    onClick={() => switchMode("reset")}
-                  >
-                    Forgot password?
-                  </Button>
-                </div>
-              )}
-
               <Button className="w-full" type="submit" disabled={busy}>
                 {mode === "reset"
                   ? "Request reset"

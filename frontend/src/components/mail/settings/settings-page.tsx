@@ -1,3 +1,4 @@
+import { SecurityPanel } from "../auth/security-panel";
 import { useState } from "react";
 import { KeyRound, Save, ShieldCheck } from "lucide-react";
 import { Button } from "@/components/ui/button";
@@ -178,47 +179,7 @@ export function SettingsPage() {
                   )}
                 </>
               )}
-              {tab === "Security" && (
-                <>
-                  {row(
-                    "Multi-factor authentication",
-                    "TOTP enrollment needs a connected authentication service.",
-                    <Button
-                      type="button"
-                      variant="outline"
-                      onClick={() =>
-                        notify(
-                          "MFA enrollment requires authentication integration. It is not enabled.",
-                        )
-                      }
-                    >
-                      Set up authenticator
-                      <KeyRound />
-                    </Button>,
-                  )}
-                  {row(
-                    "Session duration",
-                    "Maximum administrator session lifetime.",
-                    select("session", ["8 hours", "1 hour", "24 hours"]),
-                  )}
-                  {row(
-                    "Active sessions",
-                    "This is a frontend preview, not an authenticated session.",
-                    <Button
-                      type="button"
-                      variant="outline"
-                      onClick={() => notify("No authenticated sessions are connected to revoke.")}
-                    >
-                      Revoke all sessions
-                    </Button>,
-                  )}
-                  {row(
-                    "Sensitive operations",
-                    "Always require confirmation for destructive changes.",
-                    <span className="status status-healthy">Confirmation required</span>,
-                  )}
-                </>
-              )}
+              {tab === "Security" && <SecurityPanel />}
               {tab === "Notifications" && (
                 <>
                   {row(

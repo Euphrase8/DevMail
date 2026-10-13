@@ -4,6 +4,15 @@
 // surface as an honest "unavailable" state — never fabricated data.
 const BASE = (import.meta.env?.["VITE_API_BASE"] as string | undefined) ?? "/api/v1";
 
+async function csrfHeaders(init?: RequestInit): Promise<Record<string, string>> {
+  if (!init?.method || ["GET", "HEAD"].includes(init.method)) return {};
+  const response = await fetch(`${BASE}/auth/csrf`, { credentials: "include" });
+  if (!response.ok)
+    throw new ApiError(response.status, "csrf", "Could not establish a secure request.");
+  const body = (await response.json()) as { data: { token: string } };
+  return { "X-CSRF-Token": body.data.token };
+}
+
 export class ApiError extends Error {
   readonly code: string;
   readonly status: number;
@@ -24,6 +33,7 @@ async function request<T>(path: string, init?: RequestInit): Promise<T> {
     credentials: "include",
     headers: {
       "Content-Type": "application/json",
+      ...(await csrfHeaders(init)),
       ...(init?.headers ?? {}),
     },
   });
@@ -54,7 +64,11 @@ async function requestFull<T>(path: string, init?: RequestInit): Promise<T> {
   const res = await fetch(`${BASE}${path}`, {
     ...init,
     credentials: "include",
-    headers: { "Content-Type": "application/json", ...(init?.headers ?? {}) },
+    headers: {
+      "Content-Type": "application/json",
+      ...(await csrfHeaders(init)),
+      ...(init?.headers ?? {}),
+    },
   });
   let body: unknown = null;
   try {
@@ -255,9 +269,42 @@ export const api = {
   authStatus: () => request<{ hasUsers: boolean }>("/auth/status"),
   setup: (payload: { email: string; name: string; password: string }) =>
     request<User>("/auth/setup", { method: "POST", body: JSON.stringify(payload) }),
-  login: (payload: { email: string; password: string }) =>
+  login: (payload: { email: string; password: string; code?: string }) =>
     request<User>("/auth/login", { method: "POST", body: JSON.stringify(payload) }),
   logout: () => request<{ ok: boolean }>("/auth/logout", { method: "POST" }),
+  enrollTotp: (password: string) =>
+    request<{ secret: string; uri: string }>("/auth/totp/enroll", {
+      method: "POST",
+      body: JSON.stringify({ password }),
+    }),
+  verifyTotp: (code: string) =>
+    request<{ recoveryCodes: string[] }>("/auth/totp/verify", {
+      method: "POST",
+      body: JSON.stringify({ code }),
+    }),
+  disableTotp: (password: string, code: string) =>
+    request<{ ok: boolean }>("/auth/totp/disable", {
+      method: "POST",
+      body: JSON.stringify({ password, code }),
+    }),
+  changePassword: (currentPassword: string, newPassword: string) =>
+    request<{ ok: boolean }>("/auth/password", {
+      method: "POST",
+      body: JSON.stringify({ currentPassword, newPassword }),
+    }),
+  sessions: () =>
+    request<
+      {
+        id: string;
+        ip: string;
+        userAgent: string;
+        createdAt: string;
+        expiresAt: string;
+        lastSeenAt: string;
+      }[]
+    >("/auth/sessions"),
+  revokeSessions: () => request<{ ok: boolean }>("/auth/sessions", { method: "DELETE" }),
+  rotateSession: () => request<{ ok: boolean }>("/auth/rotate", { method: "POST" }),
   me: () => request<User>("/auth/me"),
   listUsers: () => request<User[]>("/users"),
   createUser: (payload: { email: string; name: string; role: string; password: string }) =>

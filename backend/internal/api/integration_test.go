@@ -13,6 +13,7 @@ import (
 	"testing"
 	"time"
 
+	"github.com/Euphrase8/DevMail/backend/internal/auth"
 	"github.com/Euphrase8/DevMail/backend/internal/config"
 	"github.com/Euphrase8/DevMail/backend/internal/db"
 	"github.com/Euphrase8/DevMail/backend/internal/engine"
@@ -58,6 +59,18 @@ func TestProvisioningIntegration(t *testing.T) {
 		t.Helper()
 		req, _ := http.NewRequest(method, server.URL+"/api/v1"+path, strings.NewReader(body))
 		req.Header.Set("Content-Type", "application/json")
+		if method != "GET" && method != "HEAD" {
+			csrfRes, err := client.Get(server.URL + "/api/v1/auth/csrf")
+			if err != nil {
+				t.Fatal(err)
+			}
+			var csrf struct{ Data struct{ Token string } }
+			if json.NewDecoder(csrfRes.Body).Decode(&csrf) != nil {
+				t.Fatal("CSRF fetch failed")
+			}
+			csrfRes.Body.Close()
+			req.Header.Set("X-CSRF-Token", csrf.Data.Token)
+		}
 		res, err := client.Do(req)
 		if err != nil {
 			t.Fatal(err)
@@ -125,4 +138,44 @@ func TestProvisioningIntegration(t *testing.T) {
 		}
 		time.Sleep(50 * time.Millisecond)
 	}
+	operator := call("POST", "/users", `{"email":"operator@example.test","name":"Operator","role":"operator","password":"Strong-operator-password-123"}`, 201)["id"].(string)
+	call("POST", "/auth/login", `{"email":"operator@example.test","password":"Strong-operator-password-123"}`, 200)
+	call("POST", "/servers", `{}`, 403)
+	call("GET", "/users", "", 403)
+	call("POST", "/auth/login", credentials, 200)
+	call("DELETE", "/users/"+operator, "", 200)
+	// Missing CSRF must fail even with a valid session.
+	request, _ := http.NewRequest("POST", server.URL+"/api/v1/auth/rotate", nil)
+	response, err := client.Do(request)
+	if err != nil {
+		t.Fatal(err)
+	}
+	response.Body.Close()
+	if response.StatusCode != 403 {
+		t.Fatal("mutation without CSRF accepted")
+	}
+	enroll := call("POST", "/auth/totp/enroll", `{"password":"Strong-test-password-123"}`, 200)
+	secret := enroll["secret"].(string)
+	code := auth.TOTP(secret, time.Now().Unix()/30)
+	verify := call("POST", "/auth/totp/verify", `{"code":"`+code+`"}`, 200)
+	recovery := verify["recoveryCodes"].([]any)[0].(string)
+	call("POST", "/auth/logout", "", 200)
+	call("POST", "/auth/login", credentials, 401)
+	call("POST", "/auth/login", `{"email":"admin@example.test","password":"Strong-test-password-123","code":"`+recovery+`"}`, 200)
+	call("POST", "/auth/login", `{"email":"admin@example.test","password":"Strong-test-password-123","code":"`+recovery+`"}`, 401)
+	call("POST", "/auth/rotate", "", 200)
+	call("POST", "/auth/password", `{"currentPassword":"Strong-test-password-123","newPassword":"Changed-strong-password-456"}`, 200)
+	call("GET", "/auth/me", "", 401)
+	for i := 0; i < 5; i++ {
+		call("POST", "/auth/login", `{"email":"admin@example.test","password":"bad"}`, 401)
+	}
+	var locked bool
+	if err = pool.QueryRow(ctx, `SELECT locked_until>now() FROM auth_attempts WHERE key=$1`, "account:"+auth.HashSessionToken("admin@example.test")).Scan(&locked); err != nil || !locked {
+		t.Fatal("persistent account lockout missing")
+	}
+	var loginEvents int
+	if err = pool.QueryRow(ctx, `SELECT COUNT(*) FROM audit_log WHERE action IN ('auth.login','auth.login_failed','auth.logout')`).Scan(&loginEvents); err != nil || loginEvents < 3 {
+		t.Fatal("auth audit events missing")
+	}
+
 }

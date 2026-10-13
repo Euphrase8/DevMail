@@ -14,8 +14,10 @@ import (
 
 // Handler exposes authentication and user administration HTTP handlers.
 type Handler struct {
-	svc  *Service
-	pool *pgxpool.Pool
+	svc    *Service
+	pool   *pgxpool.Pool
+	key    string
+	secure bool
 }
 
 // NewHandler wires the auth service handlers to a database pool.
@@ -78,6 +80,7 @@ func (h *Handler) Setup(c *gin.Context) {
 		httpapi.InternalError(c)
 		return
 	}
+	AuthEvent(ctx, h.pool, user, "auth.setup", c.ClientIP())
 	httpapi.Respond(c, http.StatusCreated, user)
 }
 
@@ -86,6 +89,7 @@ func (h *Handler) Login(c *gin.Context) {
 	var req struct {
 		Email    string `json:"email"`
 		Password string `json:"password"`
+		Code     string `json:"code"`
 	}
 	if err := c.ShouldBindJSON(&req); err != nil {
 		httpapi.Fail(c, http.StatusBadRequest, httpapi.ErrBadRequest, "Invalid request body.")
@@ -93,8 +97,9 @@ func (h *Handler) Login(c *gin.Context) {
 	}
 	ctx, cancel := context.WithTimeout(c.Request.Context(), 10*time.Second)
 	defer cancel()
-	user, token, err := h.svc.Login(ctx, req.Email, req.Password, c.ClientIP(), c.Request.UserAgent())
+	user, token, err := h.svc.Login(ctx, req.Email, req.Password, c.ClientIP(), c.Request.UserAgent(), req.Code)
 	if err != nil {
+		AuthEvent(ctx, h.pool, nil, "auth.login_failed", c.ClientIP())
 		if errors.Is(err, ErrNotFound) || err.Error() == "invalid credentials" {
 			httpapi.Fail(c, http.StatusUnauthorized, httpapi.ErrUnauthorized, "Invalid email or password.")
 			return
@@ -106,7 +111,11 @@ func (h *Handler) Login(c *gin.Context) {
 		httpapi.InternalError(c)
 		return
 	}
-	c.SetCookie(SessionCookie, token, int(SessionLifetime.Seconds()), "/", "", false, true)
+	if old, err := c.Cookie(SessionCookie); err == nil {
+		_ = h.svc.Logout(ctx, old)
+	}
+	h.cookie(c, token, int(SessionLifetime.Seconds()))
+	AuthEvent(ctx, h.pool, user, "auth.login", c.ClientIP())
 	httpapi.Respond(c, http.StatusOK, user)
 }
 
@@ -117,7 +126,8 @@ func (h *Handler) Logout(c *gin.Context) {
 		defer cancel()
 		_ = h.svc.Logout(ctx, token)
 	}
-	c.SetCookie(SessionCookie, "", -1, "/", "", false, true)
+	h.cookie(c, "", -1)
+	AuthEvent(c.Request.Context(), h.pool, CurrentUser(c), "auth.logout", c.ClientIP())
 	httpapi.Respond(c, http.StatusOK, gin.H{"ok": true})
 }
 
@@ -202,10 +212,26 @@ func (h *Handler) UpdateUser(c *gin.Context) {
 	}
 	ctx, cancel := context.WithTimeout(c.Request.Context(), 10*time.Second)
 	defer cancel()
+	if len(req.Password) > 0 && len(req.Password) < 12 {
+		httpapi.FailFields(c, "Use at least 12 characters.", nil)
+		return
+	}
+	if CurrentUser(c).ID == c.Param("id") && role != RoleSuperAdmin {
+		httpapi.Fail(c, 409, httpapi.ErrConflict, "You cannot demote your own account.")
+		return
+	}
 	user, err := h.svc.UpdateUser(ctx, c.Param("id"), req.Name, role, true, req.Password)
 	if err != nil {
 		httpapi.Fail(c, http.StatusNotFound, httpapi.ErrNotFound, "User not found.")
 		return
+	}
+	if req.Password != "" {
+		_, err = h.pool.Exec(ctx, `UPDATE sessions SET revoked=true WHERE user_id=$1`, user.ID)
+		if err != nil {
+			httpapi.InternalError(c)
+			return
+		}
+		AuthEvent(ctx, h.pool, CurrentUser(c), "auth.admin_password_reset", c.ClientIP())
 	}
 	httpapi.Respond(c, http.StatusOK, user)
 }
@@ -214,6 +240,10 @@ func (h *Handler) UpdateUser(c *gin.Context) {
 func (h *Handler) DeleteUser(c *gin.Context) {
 	ctx, cancel := context.WithTimeout(c.Request.Context(), 10*time.Second)
 	defer cancel()
+	if CurrentUser(c).ID == c.Param("id") {
+		httpapi.Fail(c, 409, httpapi.ErrConflict, "You cannot delete your own account.")
+		return
+	}
 	if err := h.svc.DeleteUser(ctx, c.Param("id")); err != nil {
 		httpapi.InternalError(c)
 		return
@@ -236,15 +266,25 @@ func validEmail(s string) bool {
 // Register attaches the auth routes to the router group. The admin group is
 // guarded by authentication, and user administration additionally requires
 // the super administrator role.
-func Register(r *gin.RouterGroup, pool *pgxpool.Pool, requireAuth gin.HandlerFunc) {
+func Register(r *gin.RouterGroup, pool *pgxpool.Pool, requireAuth gin.HandlerFunc, key string, secure bool) {
 	h := NewHandler(pool)
+	h.key = key
+	h.svc.key = key
+	h.secure = secure
 	r.GET("/auth/status", h.HasUsers)
-	r.POST("/auth/setup", h.Setup)
-	r.POST("/auth/login", h.Login)
-	r.POST("/auth/logout", h.Logout)
+	r.POST("/auth/setup", PersistentRateLimit(pool), h.Setup)
+	r.POST("/auth/login", PersistentRateLimit(pool), h.Login)
+	r.POST("/auth/logout", requireAuth, h.Logout)
 	r.GET("/auth/me", requireAuth, h.Me)
 
-	admin := r.Group("/users", requireAuth)
+	r.POST("/auth/totp/enroll", requireAuth, h.Enroll)
+	r.POST("/auth/totp/verify", requireAuth, h.VerifyEnrollment)
+	r.POST("/auth/totp/disable", requireAuth, h.DisableMFA)
+	r.POST("/auth/password", requireAuth, h.Password)
+	r.GET("/auth/sessions", requireAuth, h.Sessions)
+	r.DELETE("/auth/sessions", requireAuth, h.RevokeSessions)
+	r.POST("/auth/rotate", requireAuth, h.Rotate)
+	admin := r.Group("/users", requireAuth, RequireRole(RoleSuperAdmin))
 	admin.GET("", h.ListUsers)
 	admin.POST("", h.CreateUser)
 	admin.PATCH("/:id", h.UpdateUser)

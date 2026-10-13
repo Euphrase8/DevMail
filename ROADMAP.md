@@ -276,7 +276,7 @@ fires to the configured channel.
 
 ---
 
-### Phase 13 — Auth & session hardening  `[ ]`
+### Phase 13 — Auth & session hardening  `[x]`
 **Goal:** close the security gaps in [§ D](#d-auth--security-gaps).
 
 **Migration `0005_auth_hardening.sql`:** MFA secrets/recovery codes; session metadata.
@@ -287,11 +287,11 @@ fires to the configured channel.
 - `GET  /api/v1/auth/sessions` + `DELETE /api/v1/auth/sessions` (revoke all).
 
 **Tasks**
-- [ ] TOTP (RFC 6238) enroll/verify + recovery codes.
-- [ ] CSRF double-submit token for all cookie-auth mutations.
-- [ ] Cookie `Secure` in production, rotation, SameSite audit.
-- [ ] Account lockout + persistent rate limiting.
-- [ ] Audit login success/failure/logout; add list filters.
+- [x] TOTP (RFC 6238) enroll/verify + recovery codes.
+- [x] CSRF double-submit token for all cookie-auth mutations.
+- [x] Cookie `Secure` in production, rotation, SameSite audit.
+- [x] Account lockout + persistent rate limiting.
+- [x] Audit login success/failure/logout; add list filters.
 
 **Verification:** `go test ./...`; CSRF rejects a mutation without token; TOTP flow
 works; login events appear in `/audit`.
@@ -357,3 +357,5 @@ works; login events appear in `/audit`.
 | 2026-10-13 | 11 | Durable mailbox/alias outbox, SQL adapter, restart/retry polling, provisioning API and mailbox/alias UI; application index | `go test ./...` with PostgreSQL HTTP integration PASS; `go vet ./...` PASS; live API CRUD/provision/teardown PASS; lint 0 errors (8 warnings), frontend 18/18, typecheck and build PASS | phase-11 commit |
 
 | 2026-10-13 | 12 | Modular routing rules, pg_dump database backups with checksum/run history, encrypted SSRF-safe webhook notifications and live screens | PostgreSQL HTTP integration PASS; real pg_dump archive test PASS; webhook delivery/network/redirect tests PASS; full Go tests/vet PASS; frontend lint 0 errors, 18/18 tests, typecheck PASS | phase-12 commit |
+
+| 2026-10-13 | 13 | Signed session-bound CSRF, secure production cookies, TOTP encrypted enrollment + one-use recovery/replay protection, persistent lockout/rate limit, password/session APIs, security UI and login MFA, auth events and server role enforcement | PostgreSQL HTTP integration PASS: missing CSRF 403, operator writes/users 403, MFA/recovery replay, rotation, password revocation, persistent lockout, auth audit; full Go tests/vet PASS; frontend 18/18, lint 0 errors and typecheck PASS | phase-13 commit |
