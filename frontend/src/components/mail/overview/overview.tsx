@@ -10,7 +10,7 @@ export function Overview() {
         <h1 className="page-title">Workspace overview</h1>
         <Button onClick={() => void summary.refetch()}>Refresh</Button>
       </div>
-      {summary.isPending && <p>Loading workspace�</p>}
+      {summary.isPending && <p>Loading workspace…</p>}
       {summary.isError && (
         <p role="alert">Service unavailable. Workspace metrics could not be loaded.</p>
       )}
@@ -30,13 +30,13 @@ export function Overview() {
             ))}
           </div>
           <p>
-            {summary.data.servers.healthy} healthy servers � {summary.data.domains.verified}{" "}
+            {summary.data.servers.healthy} healthy servers · {summary.data.domains.verified}{" "}
             verified domains
           </p>
           <h2 className="section-heading">Recent activity</h2>
           {summary.data.recent.map((item) => (
             <p key={item.id} className="activity-row">
-              {item.createdAt} � {item.actor || "System"} � {item.action} � {item.resource}
+              {item.createdAt} · {item.actor || "System"} · {item.action} · {item.resource}
             </p>
           ))}
         </>

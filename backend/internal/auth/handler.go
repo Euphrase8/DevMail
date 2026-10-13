@@ -157,6 +157,7 @@ type userRequest struct {
 	Name     string `json:"name"`
 	Role     string `json:"role"`
 	Password string `json:"password,omitempty"`
+	IsActive *bool  `json:"isActive,omitempty"`
 }
 
 const minPasswordLen = 12
@@ -224,7 +225,11 @@ func (h *Handler) UpdateUser(c *gin.Context) {
 		httpapi.Fail(c, 409, httpapi.ErrConflict, "You cannot demote your own account.")
 		return
 	}
-	user, err := h.svc.UpdateUser(ctx, c.Param("id"), req.Name, role, true, req.Password)
+	active := true
+	if req.IsActive != nil {
+		active = *req.IsActive
+	}
+	user, err := h.svc.UpdateUser(ctx, c.Param("id"), req.Name, role, active, req.Password)
 	if err != nil {
 		httpapi.Fail(c, http.StatusNotFound, httpapi.ErrNotFound, "User not found.")
 		return

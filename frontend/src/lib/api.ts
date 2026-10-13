@@ -339,7 +339,7 @@ export const api = {
   listUsers: () => allPages<User>("/users"),
   createUser: (payload: { email: string; name: string; role: string; password: string }) =>
     request<User>("/users", { method: "POST", body: JSON.stringify(payload) }),
-  updateUser: (id: string, payload: { name: string; role: string; password?: string }) =>
+  updateUser: (id: string, payload: { name: string; role: string; password?: string; isActive?: boolean }) =>
     request<User>(`/users/${id}`, { method: "PATCH", body: JSON.stringify(payload) }),
   deleteUser: (id: string) => request<{ ok: boolean }>(`/users/${id}`, { method: "DELETE" }),
 

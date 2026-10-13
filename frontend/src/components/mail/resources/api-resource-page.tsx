@@ -94,9 +94,9 @@ export function ApiResourcePage({ kind }: { kind: Kind }) {
     if (kind === "users") {
       const payload = {
         name,
-        email: editor["email"] ?? "",
         role: editor["role"] ?? "operator",
         password: editor["password"] ?? "",
+        isActive: editor["isActive"] !== "false",
       };
       if (id) await api.updateUser(id, payload);
       else await api.createUser(payload);
@@ -108,13 +108,30 @@ export function ApiResourcePage({ kind }: { kind: Kind }) {
       ? ["name", "hostname", "ipv4", "ipv6", "location", "environment", "notes"]
       : kind === "domains"
         ? ["name", "serverId", "quotaBytes", "catchAll"]
-        : ["name", "email", "role", "password"];
-  const title = kind[0]!.toUpperCase() + kind.slice(1);
+        : ["name", "email", "role", "isActive", "password"];
+  const page = {
+    servers: {
+      title: "Mail servers",
+      description: "Register, inspect, and operate the infrastructure that serves your domains.",
+    },
+    domains: {
+      title: "Domains",
+      description: "Verify ownership, validate DNS, and provision every mail domain.",
+    },
+    users: {
+      title: "Users & access",
+      description: "Manage administrator roles, account access, password resets, and MFA status.",
+    },
+  }[kind];
   const shown = rows.data?.data ?? [];
   return (
     <div className="space-y-6">
-      <div className="flex justify-between">
-        <h1 className="page-title">{title}</h1>
+      <div className="flex items-start justify-between gap-4">
+        <div>
+          <div className="eyebrow mb-3">WORKSPACE / {kind.toUpperCase()}</div>
+          <h1 className="page-title">{page.title}</h1>
+          <p className="mt-3 text-[13px] text-muted-foreground">{page.description}</p>
+        </div>
         <Button onClick={() => edit()}>Add {kind.slice(0, -1)}</Button>
       </div>
       {rows.isError && (
@@ -156,7 +173,7 @@ export function ApiResourcePage({ kind }: { kind: Kind }) {
         <thead>
           <tr>
             <th>Name</th>
-            <th>{kind === "users" ? "Role" : "Status"}</th>
+            <th>{kind === "users" ? "Access" : "Status"}</th>
             <th>Details</th>
             <th>Actions</th>
           </tr>
@@ -167,12 +184,16 @@ export function ApiResourcePage({ kind }: { kind: Kind }) {
               <td>
                 <button onClick={() => setDetail(row)}>{row.name}</button>
               </td>
-              <td>{"role" in row ? row.role : row.status}</td>
+              <td>
+                {"role" in row
+                  ? `${row.role.replaceAll("_", " ")} · ${row.isActive ? "active" : "suspended"}`
+                  : row.status}
+              </td>
               <td>
                 {"hostname" in row
                   ? `${row.hostname} · ${row.ipv4 || row.ipv6}`
                   : "email" in row
-                    ? row.email
+                    ? `${row.email}${row.mfaEnabled ? " · MFA enabled" : ""}`
                     : `Quota ${row.quotaBytes} bytes`}
               </td>
               <td>
@@ -232,7 +253,7 @@ export function ApiResourcePage({ kind }: { kind: Kind }) {
           Previous
         </Button>
         <span>
-          Page {page} � {rows.data?.meta.total ?? 0} records
+          Page {page} · {rows.data?.meta.total ?? 0} records
         </span>
         <Button
           disabled={!rows.data || page * 25 >= rows.data.meta.total}
@@ -281,7 +302,7 @@ export function ApiResourcePage({ kind }: { kind: Kind }) {
                         </option>
                       ))}
                     </select>
-                  ) : key === "role" || key === "catchAll" ? (
+                  ) : key === "role" || key === "catchAll" || key === "isActive" ? (
                     <select
                       value={editor[key] ?? ""}
                       onChange={(e) => setEditor({ ...editor, [key]: e.target.value })}
@@ -290,7 +311,9 @@ export function ApiResourcePage({ kind }: { kind: Kind }) {
                         ? ["operator", "domain_admin", "server_admin", "super_admin"]
                         : ["false", "true"]
                       ).map((value) => (
-                        <option key={value}>{value}</option>
+                        <option key={value} value={value}>
+                          {key === "isActive" ? (value === "true" ? "Active" : "Suspended") : value}
+                        </option>
                       ))}
                     </select>
                   ) : (

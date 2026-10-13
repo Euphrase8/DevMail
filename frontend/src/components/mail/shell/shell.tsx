@@ -139,7 +139,7 @@ export function MailShell({ children }: { children: ReactNode }) {
             onClick={() => setPanel(panel === "account" ? "" : "account")}
           >
             <span className="grid h-7 w-7 place-items-center rounded-full bg-secondary font-mono text-[10px]">
-              {session?.name?.slice(0, 2).toUpperCase() || "�"}
+              {session?.name?.slice(0, 2).toUpperCase() || "DM"}
             </span>
             <ChevronDown className="size-3 text-muted-foreground" />
           </Button>
@@ -299,7 +299,7 @@ export function MailShell({ children }: { children: ReactNode }) {
               ? "Help topics cover the mail workflow end to end."
               : backend === "online"
                 ? "Connected to the DevMail API."
-                : "API offline · showing sample workspace data"}
+                : "API offline · live workspace data unavailable"}
           </DialogDescription>
           {panel === "notifications" ? (
             <>

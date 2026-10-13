@@ -132,7 +132,7 @@ const cards = [
   {
     icon: TriangleAlert,
     title: "Honest boundaries",
-    body: "This frontend preview is not connected to a mail engine, DNS provider, or authentication service. Nothing here verifies ownership, sends mail, or changes infrastructure.",
+    body: "DevMail connects its administration UI to the API. Mail delivery, DNS credentials, and mail-engine infrastructure are configured services with their own operational prerequisites.",
   },
   {
     icon: FileKey2,

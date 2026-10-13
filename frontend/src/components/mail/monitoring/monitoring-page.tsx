@@ -19,8 +19,8 @@ export function MonitoringPage() {
       </div>
       {summary.data && (
         <p>
-          {summary.data.servers.healthy} healthy � {summary.data.servers.degraded} degraded �{" "}
-          {summary.data.servers.offline} offline � {summary.data.servers.pending} pending
+          {summary.data.servers.healthy} healthy · {summary.data.servers.degraded} degraded ·{" "}
+          {summary.data.servers.offline} offline · {summary.data.servers.pending} pending
         </p>
       )}
       <p>
