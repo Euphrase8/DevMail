@@ -1,0 +1,4 @@
+# Files under deploy/mail run inside Linux containers, so they must keep LF
+# line endings regardless of the platform the repository is checked out on.
+# Scoped here to avoid renormalizing existing tracked files.
+deploy/mail/** text eol=lf
