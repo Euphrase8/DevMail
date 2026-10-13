@@ -1,10 +1,10 @@
 import { createFileRoute } from "@tanstack/react-router";
-import { MailboxesPage } from "@/components/mail/resources/mailboxes-page";
-import { routeMeta } from "@/lib/mail/data";
+import { ResourcePage } from "@/components/mail/resources/resource-page";
+import { modules, routeMeta } from "@/lib/mail/data";
 export const Route = createFileRoute("/mailboxes")({
-  head: () => routeMeta("Mailboxes", "Domain-scoped mailbox management."),
+  head: () => routeMeta(modules["mailboxes"]!.title, modules["mailboxes"]!.description),
   component: Page,
 });
 function Page() {
-  return <MailboxesPage />;
+  return <ResourcePage section="mailboxes" />;
 }

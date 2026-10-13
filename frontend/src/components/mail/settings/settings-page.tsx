@@ -1,341 +1,325 @@
-import { useEffect, useState, type ReactNode } from "react";
-import { useQuery, useQueryClient } from "@tanstack/react-query";
-import { Database, Globe2, HardDrive, KeyRound, Mail, Save, ShieldCheck } from "lucide-react";
-import { api } from "@/lib/api";
+import { useState } from "react";
+import { KeyRound, Save, ShieldCheck } from "lucide-react";
 import { Button } from "@/components/ui/button";
-import { SecurityPanel } from "../auth/security-panel";
-
-type Tab =
-  | "General"
-  | "Mail engine"
-  | "DNS providers"
-  | "Security"
-  | "Notifications"
-  | "Storage"
-  | "API & integrations";
-
-const tabs: { name: Tab; icon: typeof Globe2 }[] = [
-  { name: "General", icon: Globe2 },
-  { name: "Mail engine", icon: Mail },
-  { name: "DNS providers", icon: Database },
-  { name: "Security", icon: ShieldCheck },
-  { name: "Notifications", icon: Mail },
-  { name: "Storage", icon: HardDrive },
-  { name: "API & integrations", icon: KeyRound },
+import {
+  Select,
+  SelectContent,
+  SelectItem,
+  SelectTrigger,
+  SelectValue,
+} from "@/components/ui/select";
+import { useMail } from "../store";
+const tabs = [
+  "General",
+  "Mail engine",
+  "DNS providers",
+  "Security",
+  "Notifications",
+  "Storage",
+  "API & integrations",
 ];
-
-type Draft = {
-  name: string;
-  timezone: string;
-  webmail: string;
-  defaultQuotaBytes: string;
-  mailEngine: "none" | "sql";
-};
-
-function asDraft(data: Record<string, unknown>): Draft {
-  const workspace = data["workspace"] as { name?: string } | undefined;
-  return {
-    name: String(data["name"] ?? workspace?.name ?? "DevMail"),
-    timezone: String(data["timezone"] ?? "UTC"),
-    webmail: String(data["webmail"] ?? ""),
-    defaultQuotaBytes: String(data["defaultQuotaBytes"] ?? 10737418240),
-    mailEngine: data["mailEngine"] === "sql" ? "sql" : "none",
-  };
-}
-
-function SettingRow({
-  title,
-  description,
-  children,
-}: {
-  title: string;
-  description: string;
-  children: ReactNode;
-}) {
-  return (
-    <div className="settings-row">
+export function SettingsPage() {
+  const { settings, setSetting, notify } = useMail();
+  const [tab, setTab] = useState("General");
+  const [values, setValues] = useState({ ...settings });
+  const input = (key: string, placeholder = "") => (
+    <input
+      aria-label={key}
+      type={key.includes("password") ? "password" : "text"}
+      value={values[key] || ""}
+      placeholder={placeholder}
+      onChange={(e) => setValues({ ...values, [key]: e.target.value })}
+    />
+  );
+  const select = (key: string, options: string[]) => (
+    <Select
+      value={values[key] || options[0]}
+      onValueChange={(v) => setValues({ ...values, [key]: v })}
+    >
+      <SelectTrigger aria-label={key} className="h-9 w-full">
+        <SelectValue />
+      </SelectTrigger>
+      <SelectContent>
+        {options.map((v) => (
+          <SelectItem key={v} value={v}>
+            {v}
+          </SelectItem>
+        ))}
+      </SelectContent>
+    </Select>
+  );
+  const row = (title: string, description: string, control: React.ReactNode) => (
+    <div className="settings-row" key={title}>
       <div>
-        <h3 className="text-sm font-medium">{title}</h3>
+        <h3 className="text-sm">{title}</h3>
         <p>{description}</p>
       </div>
-      <div>{children}</div>
+      <div>{control}</div>
     </div>
   );
-}
-
-function ResourceSummary({
-  count,
-  href,
-  label,
-  empty,
-}: {
-  count: number;
-  href: string;
-  label: string;
-  empty: string;
-}) {
-  return (
-    <div className="rounded-md border border-border p-4">
-      <p className="text-2xl font-semibold">{count}</p>
-      <p className="mt-1 text-sm">{count === 1 ? label.slice(0, -1) : label}</p>
-      <p className="mt-1 text-xs text-muted-foreground">
-        {count === 0 ? empty : "Managed through the connected API."}
-      </p>
-      <a
-        className="mt-3 inline-block text-xs text-primary underline-offset-4 hover:underline"
-        href={href}
-      >
-        Open {label.toLowerCase()}
-      </a>
-    </div>
-  );
-}
-
-export function SettingsPage() {
-  const client = useQueryClient();
-  const settings = useQuery({ queryKey: ["settings"], queryFn: api.getSettings, retry: false });
-  const [tab, setTab] = useState<Tab>("General");
-  const [draft, setDraft] = useState<Draft>(() => asDraft({}));
-  const [message, setMessage] = useState("");
-  const [busy, setBusy] = useState(false);
-
-  useEffect(() => {
-    if (settings.data) setDraft(asDraft(settings.data));
-  }, [settings.data]);
-
-  const providers = useQuery({
-    queryKey: ["providers"],
-    queryFn: api.listProviders,
-    enabled: tab === "DNS providers",
-    retry: false,
-  });
-  const notifications = useQuery({
-    queryKey: ["notifications"],
-    queryFn: () => api.listOps("notifications"),
-    enabled: tab === "Notifications",
-    retry: false,
-  });
-  const backups = useQuery({
-    queryKey: ["backups"],
-    queryFn: () => api.listOps("backups"),
-    enabled: tab === "Storage",
-    retry: false,
-  });
-
-  const update = (key: keyof Draft, value: string) =>
-    setDraft((current) => ({ ...current, [key]: value }));
-  const save = async () => {
-    const quota = Number(draft.defaultQuotaBytes);
-    if (!Number.isSafeInteger(quota) || quota < 0) {
-      setMessage("Default mailbox quota must be a non-negative whole number of bytes.");
-      return;
-    }
-    setBusy(true);
-    setMessage("");
-    try {
-      await api.updateSettings({ ...draft, defaultQuotaBytes: quota });
-      await client.invalidateQueries({ queryKey: ["settings"] });
-      setMessage("Workspace settings saved.");
-    } catch (error) {
-      setMessage(error instanceof Error ? error.message : "Settings could not be saved.");
-    } finally {
-      setBusy(false);
-    }
-  };
-
-  if (settings.isLoading) return <p className="text-muted-foreground">Loading settings…</p>;
-  if (settings.isError)
-    return <p role="alert">Settings are unavailable. Reconnect to the API and try again.</p>;
-
   return (
     <div className="page-enter">
       <div className="eyebrow mb-3">
         <span className="text-primary">WORKSPACE</span> / SETTINGS
       </div>
-      <h1 className="page-title">Settings hub</h1>
+      <h1 className="page-title">Your workspace, your way.</h1>
       <p className="mt-3 text-[13px] text-muted-foreground">
-        Workspace configuration, connected services, and account controls.
+        Fine-tune the foundations of your mail infrastructure.
       </p>
-
-      <div className="mt-8 grid gap-8 lg:grid-cols-[220px_minmax(0,1fr)]">
-        <nav aria-label="Settings sections" className="border-r border-border pr-6">
-          {tabs.map(({ name, icon: Icon }) => (
-            <button
-              key={name}
-              type="button"
-              onClick={() => setTab(name)}
-              className={`flex w-full items-center gap-2.5 border-b border-border py-3 text-left text-xs transition-colors ${tab === name ? "text-primary" : "text-muted-foreground hover:text-foreground"}`}
-              aria-current={tab === name ? "page" : undefined}
+      <form
+        onSubmit={(e) => {
+          e.preventDefault();
+          Object.entries(values)
+            .filter(([k]) => !k.includes("password") && !k.includes("token"))
+            .forEach(([k, v]) => setSetting(k, v));
+          notify("Sample settings saved for this session. Services are not configured.");
+        }}
+      >
+        <div className="mt-8 flex flex-col lg:h-[calc(100vh-220px)] lg:overflow-hidden">
+          <div className="grid lg:h-full lg:grid-cols-[220px_minmax(0,1fr)] lg:gap-9">
+            <nav
+              aria-label="Settings sections"
+              className="shrink-0 lg:border-r lg:border-border lg:pr-9 lg:pt-6"
             >
-              <Icon className="size-4" />
-              {name}
-            </button>
-          ))}
-        </nav>
-
-        <section>
-          <h2 className="section-heading">{tab}</h2>
-          {tab === "General" && (
-            <>
-              <SettingRow
-                title="Workspace name"
-                description="Shown in the application shell and administrative views."
-              >
-                <input
-                  aria-label="Workspace name"
-                  value={draft.name}
-                  maxLength={100}
-                  onChange={(event) => update("name", event.target.value)}
-                />
-              </SettingRow>
-              <SettingRow
-                title="Timezone"
-                description="Used for audit entries, jobs, backups, and monitoring timestamps."
-              >
-                <input
-                  aria-label="Timezone"
-                  value={draft.timezone}
-                  onChange={(event) => update("timezone", event.target.value)}
-                  placeholder="UTC"
-                />
-              </SettingRow>
-              <SettingRow
-                title="Default mailbox quota"
-                description="Applied when a new mailbox is created without an explicit quota."
-              >
-                <input
-                  aria-label="Default mailbox quota"
-                  type="number"
-                  min={0}
-                  value={draft.defaultQuotaBytes}
-                  onChange={(event) => update("defaultQuotaBytes", event.target.value)}
-                />
-              </SettingRow>
-            </>
-          )}
-          {tab === "Mail engine" && (
-            <>
-              <SettingRow
-                title="Provisioning adapter"
-                description="The selected adapter is persisted. An environment override takes effect after an API restart."
-              >
-                <select
-                  aria-label="Mail engine"
-                  value={draft.mailEngine}
-                  onChange={(event) => update("mailEngine", event.target.value)}
+              {tabs.map((t) => (
+                <button
+                  key={t}
+                  type="button"
+                  onClick={() => setTab(t)}
+                  className={`flex w-full items-center gap-2.5 border-b border-border py-3 pr-2 text-left text-xs transition-colors ${
+                    tab === t ? "text-primary" : "text-muted-foreground hover:text-foreground"
+                  }`}
                 >
-                  <option value="none">Unmanaged records</option>
-                  <option value="sql">SQL virtual users</option>
-                </select>
-              </SettingRow>
-              <SettingRow
-                title="Provisioning status"
-                description="Mailbox and alias changes are recorded in the durable job queue."
-              >
-                <a className="text-xs text-primary underline-offset-4 hover:underline" href="/jobs">
-                  Open provisioning jobs
-                </a>
-              </SettingRow>
-            </>
-          )}
-          {tab === "DNS providers" && (
-            <div className="grid gap-4 sm:grid-cols-2">
-              {providers.isError ? (
-                <p role="alert">DNS providers are unavailable.</p>
-              ) : (
-                <ResourceSummary
-                  count={providers.data?.length ?? 0}
-                  label="DNS providers"
-                  href="/providers"
-                  empty="Connect a provider or use manual DNS."
-                />
+                  <span
+                    className={`h-1.5 w-1.5 rounded-full ${tab === t ? "bg-primary" : "bg-transparent"}`}
+                  />
+                  {t}
+                </button>
+              ))}
+            </nav>
+            <div className="no-scrollbar min-h-0 lg:overflow-y-auto lg:pt-6 lg:pr-2">
+              <h2 className="section-heading">{tab}</h2>
+              {tab === "General" && (
+                <>
+                  {row(
+                    "Workspace name",
+                    "The name displayed across your administration panel.",
+                    input("name"),
+                  )}
+                  {row(
+                    "Timezone",
+                    "Used for activity, jobs, and scheduled operations.",
+                    select("timezone", [
+                      "UTC",
+                      "Europe/Berlin",
+                      "America/New_York",
+                      "Africa/Dar_es_Salaam",
+                    ]),
+                  )}
+                  {row(
+                    "Log retention",
+                    "Number of days to retain administrative audit records.",
+                    input("retention", "90"),
+                  )}
+                </>
               )}
-              <ResourceSummary
-                count={0}
-                label="DNS records"
-                href="/dns"
-                empty="Manage domain DNS records from the DNS screen."
-              />
-            </div>
-          )}
-          {tab === "Security" && <SecurityPanel />}
-          {tab === "Notifications" && (
-            <div className="grid gap-4 sm:grid-cols-2">
-              {notifications.isError ? (
-                <p role="alert">Notification destinations are unavailable.</p>
-              ) : (
-                <ResourceSummary
-                  count={notifications.data?.length ?? 0}
-                  label="notification destinations"
-                  href="/notifications"
-                  empty="Create a webhook destination to receive operational events."
-                />
+              {tab === "Mail engine" && (
+                <>
+                  {row(
+                    "Mail engine",
+                    "Supported administrative adapter.",
+                    select("engine", ["Mailcow", "Other — adapter required"]),
+                  )}
+                  {row(
+                    "Administrative URL",
+                    "The secure mail-engine API endpoint.",
+                    input("engineUrl", "https://mail.example.com/api/v1"),
+                  )}
+                  {row(
+                    "API credential",
+                    "Use a restricted key. Never expose credentials in browser code.",
+                    <p className="py-2 text-xs text-warning">
+                      Credential entry is disabled until a secure service is connected.
+                    </p>,
+                  )}
+                  {row(
+                    "Connection status",
+                    "No live engine is connected to this preview.",
+                    <span className="status status-pending">Not connected</span>,
+                  )}
+                </>
               )}
-              <div className="rounded-md border border-border p-4 text-sm text-muted-foreground">
-                Webhook endpoints are encrypted at rest and tested through the notification service.
-              </div>
-            </div>
-          )}
-          {tab === "Storage" && (
-            <div className="grid gap-4 sm:grid-cols-2">
-              {backups.isError ? (
-                <p role="alert">Backup policies are unavailable.</p>
-              ) : (
-                <ResourceSummary
-                  count={backups.data?.length ?? 0}
-                  label="backup policies"
-                  href="/backups"
-                  empty="Create a backup policy to protect the database."
-                />
+              {tab === "DNS providers" && (
+                <>
+                  {row(
+                    "Default provider",
+                    "Manual DNS works with any provider.",
+                    select("provider", ["Manual", "Cloudflare"]),
+                  )}
+                  {row(
+                    "Cloudflare zone ID",
+                    "Select the zone under your control.",
+                    input("zone", "Zone identifier"),
+                  )}
+                  {row(
+                    "API token",
+                    "Zone-scoped DNS read and edit permissions only.",
+                    <p className="py-2 text-xs text-warning">
+                      Secure credential storage requires service integration.
+                    </p>,
+                  )}
+                  {row(
+                    "Ownership verification",
+                    "Require domain control before activation.",
+                    <div className="flex items-center gap-2 text-xs text-primary">
+                      <ShieldCheck className="size-4" />
+                      Always required
+                    </div>,
+                  )}
+                </>
               )}
-              <div className="rounded-md border border-border p-4 text-sm text-muted-foreground">
-                Backup runs include status, checksums, size, and retention information.
-              </div>
-            </div>
-          )}
-          {tab === "API & integrations" && (
-            <>
-              <SettingRow
-                title="Webmail URL"
-                description="The HTTPS endpoint opened by the Webmail screen for administrators."
-              >
-                <input
-                  aria-label="Webmail URL"
-                  type="url"
-                  value={draft.webmail}
-                  onChange={(event) => update("webmail", event.target.value)}
-                  placeholder="https://webmail.example.com"
-                />
-              </SettingRow>
-              <SettingRow
-                title="API contract"
-                description="The versioned REST contract describes routes and request schemas."
-              >
-                <a
-                  className="text-xs text-primary underline-offset-4 hover:underline"
-                  href="/api/v1/openapi.json"
-                >
-                  Open OpenAPI document
-                </a>
-              </SettingRow>
-            </>
-          )}
-
-          {["General", "Mail engine", "API & integrations"].includes(tab) && (
-            <div className="mt-8 flex items-center gap-4 border-t border-border pt-5">
-              <Button disabled={busy} onClick={() => void save()}>
-                <Save />
-                Save changes
-              </Button>
-              {message && (
-                <p role="status" className="text-sm">
-                  {message}
+              {tab === "Security" && (
+                <>
+                  {row(
+                    "Multi-factor authentication",
+                    "TOTP enrollment needs a connected authentication service.",
+                    <Button
+                      type="button"
+                      variant="outline"
+                      onClick={() =>
+                        notify(
+                          "MFA enrollment requires authentication integration. It is not enabled.",
+                        )
+                      }
+                    >
+                      Set up authenticator
+                      <KeyRound />
+                    </Button>,
+                  )}
+                  {row(
+                    "Session duration",
+                    "Maximum administrator session lifetime.",
+                    select("session", ["8 hours", "1 hour", "24 hours"]),
+                  )}
+                  {row(
+                    "Active sessions",
+                    "This is a frontend preview, not an authenticated session.",
+                    <Button
+                      type="button"
+                      variant="outline"
+                      onClick={() => notify("No authenticated sessions are connected to revoke.")}
+                    >
+                      Revoke all sessions
+                    </Button>,
+                  )}
+                  {row(
+                    "Sensitive operations",
+                    "Always require confirmation for destructive changes.",
+                    <span className="status status-healthy">Confirmation required</span>,
+                  )}
+                </>
+              )}
+              {tab === "Notifications" && (
+                <>
+                  {row(
+                    "Email notifications",
+                    "Delivery, certificate, and server health alerts.",
+                    select("notifications", ["On", "Off"]),
+                  )}
+                  {row(
+                    "Alert email",
+                    "Recipient for operational alerts.",
+                    <input
+                      type="email"
+                      aria-label="Alert email"
+                      value={values["alertEmail"] || ""}
+                      onChange={(e) => setValues({ ...values, alertEmail: e.target.value })}
+                      placeholder="admin@example.com"
+                    />,
+                  )}
+                  {row(
+                    "Webhook URL",
+                    "Optional notification endpoint.",
+                    input("webhook", "https://example.com/webhook"),
+                  )}
+                  {row(
+                    "Alert severity",
+                    "Minimum severity for notifications.",
+                    select("severity", ["Warning and critical", "Critical only", "All events"]),
+                  )}
+                </>
+              )}
+              {tab === "Storage" && (
+                <>
+                  {row(
+                    "Backup destination",
+                    "Choose a compatible backup target.",
+                    select("storage", ["S3-compatible", "Local volume"]),
+                  )}
+                  {row("Bucket name", "Backup storage bucket.", input("bucket", "relay-backups"))}
+                  {row(
+                    "Endpoint URL",
+                    "Your object storage endpoint.",
+                    input("storageUrl", "https://storage.example.com"),
+                  )}
+                  {row(
+                    "Encryption",
+                    "Encrypt backup archives before upload.",
+                    select("encryption", ["Required", "Required — customer managed key"]),
+                  )}
+                  {row(
+                    "Retention",
+                    "Days to keep completed backups.",
+                    input("backupRetention", "30"),
+                  )}
+                </>
+              )}
+              {tab === "API & integrations" && (
+                <>
+                  {row(
+                    "Control-plane API",
+                    "Connection boundary for the continuing implementation.",
+                    input("api"),
+                  )}
+                  {row(
+                    "Service status",
+                    "Backend services are intentionally outside this frontend scope.",
+                    <span className="status status-pending">Not connected</span>,
+                  )}
+                  {row(
+                    "Administrative tokens",
+                    "Tokens must be issued and stored by the backend.",
+                    <Button
+                      type="button"
+                      variant="outline"
+                      onClick={() =>
+                        notify("Token issuance is not connected. No API token was created.")
+                      }
+                    >
+                      Create scoped token
+                      <KeyRound />
+                    </Button>,
+                  )}
+                  {row(
+                    "Webmail URL",
+                    "HTTPS Roundcube or mail-suite webmail endpoint.",
+                    input("webmail", "https://mail.example.com/SOGo/"),
+                  )}
+                </>
+              )}
+              <div className="mt-8 flex items-center justify-between gap-4 border-t border-border pt-5">
+                <p className="text-[11px] text-muted-foreground">
+                  Frontend settings only · sensitive credentials are never retained.
                 </p>
-              )}
+                <Button type="submit" size="sm">
+                  <Save />
+                  Save changes
+                </Button>
+              </div>
             </div>
-          )}
-        </section>
-      </div>
+          </div>
+        </div>
+      </form>
     </div>
   );
 }

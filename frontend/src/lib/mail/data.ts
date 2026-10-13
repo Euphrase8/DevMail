@@ -18,9 +18,37 @@ import {
   Waypoints,
   type LucideIcon,
 } from "lucide-react";
-
+export type Section =
+  | "servers"
+  | "domains"
+  | "dns"
+  | "mailboxes"
+  | "aliases"
+  | "routing"
+  | "monitoring"
+  | "jobs"
+  | "audit"
+  | "users"
+  | "settings"
+  | "webmail"
+  | "backups";
 export type MailRecord = { id: string; name: string; status: string; [key: string]: string };
-
+export type Field = {
+  key: string;
+  label: string;
+  type?: string;
+  options?: string[];
+  required?: boolean;
+  placeholder?: string;
+};
+export type Module = {
+  title: string;
+  description: string;
+  singular: string;
+  columns: [string, string][];
+  fields: Field[];
+  action?: string;
+};
 export const navigation: {
   label: string;
   path: string;
@@ -29,10 +57,16 @@ export const navigation: {
   count?: string;
 }[] = [
   { label: "Overview", path: "/", icon: LayoutDashboard, group: "WORKSPACE" },
-  { label: "Servers", path: "/servers", icon: Server, group: "INFRASTRUCTURE" },
-  { label: "Domains", path: "/domains", icon: Globe, group: "INFRASTRUCTURE" },
+  { label: "Servers", path: "/servers", icon: Server, group: "INFRASTRUCTURE", count: "3" },
+  { label: "Domains", path: "/domains", icon: Globe, group: "INFRASTRUCTURE", count: "8" },
   { label: "DNS records", path: "/dns", icon: Waypoints, group: "INFRASTRUCTURE" },
-  { label: "DNS providers", path: "/providers", icon: CloudCog, group: "INFRASTRUCTURE" },
+  {
+    label: "DNS providers",
+    path: "/providers",
+    icon: CloudCog,
+    group: "INFRASTRUCTURE",
+    count: "2",
+  },
   { label: "Mailboxes", path: "/mailboxes", icon: Inbox, group: "MAIL MANAGEMENT" },
   { label: "Aliases", path: "/aliases", icon: AtSign, group: "MAIL MANAGEMENT" },
   { label: "Mail routing", path: "/routing", icon: ArrowLeftRight, group: "MAIL MANAGEMENT" },
@@ -46,7 +80,555 @@ export const navigation: {
   { label: "Settings", path: "/settings", icon: Settings2, group: "ADMINISTRATION" },
   { label: "Documentation & help", path: "/docs", icon: CircleHelp, group: "ADMINISTRATION" },
 ];
-
+export const modules: Record<string, Module> = {
+  servers: {
+    title: "Mail servers",
+    description: "Your infrastructure. Connected, observable, under your control.",
+    singular: "server",
+    action: "Register server",
+    columns: [
+      ["name", "Server / hostname"],
+      ["location", "Location"],
+      ["ip", "IP address"],
+      ["domains", "Domains"],
+      ["usage", "CPU / Memory"],
+      ["status", "Status"],
+    ],
+    fields: [
+      { key: "name", label: "Server name", required: true },
+      { key: "hostname", label: "Mail hostname", required: true, placeholder: "mail.example.com" },
+      { key: "ip", label: "Public IPv4", required: true, placeholder: "203.0.113.10" },
+      { key: "ipv6", label: "IPv6 (optional)" },
+      { key: "location", label: "Location", required: true },
+      { key: "environment", label: "Environment", options: ["Production", "Staging"] },
+      { key: "cpu", label: "CPU cores", type: "number" },
+      { key: "memory", label: "Memory (GB)", type: "number" },
+      { key: "disk", label: "Disk capacity (GB)", type: "number" },
+      { key: "sshUser", label: "Enrollment user (optional)" },
+      { key: "sshPort", label: "SSH port", type: "number" },
+    ],
+  },
+  domains: {
+    title: "Domains",
+    description: "One infrastructure. Every domain, independently managed.",
+    singular: "domain",
+    action: "Add domain",
+    columns: [
+      ["name", "Domain"],
+      ["server", "Mail server"],
+      ["mailboxes", "Mailboxes"],
+      ["storage", "Storage"],
+      ["dns", "DNS readiness"],
+      ["status", "Status"],
+    ],
+    fields: [
+      { key: "name", label: "Domain name", required: true, placeholder: "example.com" },
+      {
+        key: "server",
+        label: "Mail server",
+        options: ["eu-central-01", "us-east-01", "eu-west-01"],
+      },
+      { key: "provider", label: "DNS provider", options: ["Manual", "Cloudflare"] },
+      { key: "quota", label: "Domain quota (GB)", type: "number" },
+      { key: "limit", label: "Mailbox limit", type: "number" },
+      {
+        key: "catchall",
+        label: "Catch-all",
+        options: ["Disabled", "Enabled — increased spam risk"],
+      },
+    ],
+  },
+  dns: {
+    title: "DNS records",
+    description: "Every record in place. Every prerequisite visible.",
+    singular: "DNS record",
+    action: "Add record",
+    columns: [
+      ["name", "Record name"],
+      ["type", "Type"],
+      ["value", "Expected value"],
+      ["observed", "Observed"],
+      ["status", "Status"],
+    ],
+    fields: [
+      { key: "name", label: "Record name", required: true },
+      { key: "type", label: "Record type", options: ["MX", "TXT", "A", "AAAA", "CNAME", "PTR"] },
+      { key: "value", label: "Expected value", required: true },
+      { key: "ttl", label: "TTL (seconds)", type: "number" },
+    ],
+  },
+  mailboxes: {
+    title: "Mailboxes",
+    description: "A home for every conversation. Secure by default.",
+    singular: "mailbox",
+    action: "Create mailbox",
+    columns: [
+      ["name", "Email address"],
+      ["displayName", "Display name"],
+      ["server", "Mail server"],
+      ["storage", "Storage / quota"],
+      ["lastLogin", "Last login"],
+      ["status", "Status"],
+    ],
+    fields: [
+      { key: "name", label: "Email address", type: "email", required: true },
+      { key: "displayName", label: "Display name", required: true },
+      { key: "password", label: "Initial password", type: "password", required: true },
+      { key: "quota", label: "Quota (GB)", type: "number", required: true },
+      {
+        key: "server",
+        label: "Mail server",
+        options: ["eu-central-01", "us-east-01", "eu-west-01"],
+      },
+      { key: "forward", label: "Forwarding address (optional)", type: "email" },
+      { key: "retain", label: "Retain local copy", options: ["Yes", "No"] },
+    ],
+  },
+  aliases: {
+    title: "Aliases",
+    description: "The right address. The right destination.",
+    singular: "alias",
+    action: "Create alias",
+    columns: [
+      ["name", "Alias address"],
+      ["destination", "Destinations"],
+      ["domain", "Domain"],
+      ["status", "Status"],
+    ],
+    fields: [
+      { key: "name", label: "Alias address", type: "email", required: true },
+      {
+        key: "destination",
+        label: "Destination addresses",
+        required: true,
+        placeholder: "alex@example.com, sam@example.com",
+      },
+      { key: "domain", label: "Domain", options: ["acme.studio", "orbit.design", "getnimbus.io"] },
+    ],
+  },
+  routing: {
+    title: "Mail routing",
+    description: "Keep mail moving, exactly where it belongs.",
+    singular: "routing rule",
+    action: "Add rule",
+    columns: [
+      ["name", "Rule"],
+      ["match", "Match"],
+      ["destination", "Destination"],
+      ["priority", "Priority"],
+      ["status", "Status"],
+    ],
+    fields: [
+      { key: "name", label: "Rule name", required: true },
+      { key: "match", label: "Match pattern", required: true },
+      { key: "destination", label: "Destination", required: true },
+      { key: "priority", label: "Priority", type: "number" },
+      {
+        key: "type",
+        label: "Rule type",
+        options: ["Forwarding", "Transport", "Relay", "Catch-all"],
+      },
+    ],
+  },
+  jobs: {
+    title: "Provisioning jobs",
+    description: "Every change has a preflight, a progress trail, and an outcome.",
+    singular: "job",
+    columns: [
+      ["name", "Operation"],
+      ["target", "Resource"],
+      ["progress", "Progress"],
+      ["started", "Started"],
+      ["status", "Status"],
+    ],
+    fields: [],
+  },
+  audit: {
+    title: "Audit log",
+    description: "A transparent history of every administrative action.",
+    singular: "event",
+    columns: [
+      ["name", "Action"],
+      ["actor", "Actor"],
+      ["target", "Resource"],
+      ["started", "Timestamp"],
+      ["status", "Outcome"],
+    ],
+    fields: [],
+  },
+  users: {
+    title: "Users & access",
+    description: "The right permissions. No more, no less.",
+    singular: "user",
+    action: "Invite user",
+    columns: [
+      ["name", "User"],
+      ["email", "Email"],
+      ["role", "Role"],
+      ["scope", "Resource scope"],
+      ["lastLogin", "Last active"],
+      ["status", "Status"],
+    ],
+    fields: [
+      { key: "name", label: "Full name", required: true },
+      { key: "email", label: "Email address", type: "email", required: true },
+      {
+        key: "role",
+        label: "Role",
+        options: [
+          "Super Administrator",
+          "Server Administrator",
+          "Domain Administrator",
+          "Read-only Operator",
+        ],
+      },
+      {
+        key: "scope",
+        label: "Resource scope",
+        options: ["All resources", "eu-central-01", "acme.studio", "orbit.design"],
+      },
+    ],
+  },
+  backups: {
+    title: "Backups & recovery",
+    description: "Protect your mail. Know your recovery path.",
+    singular: "backup policy",
+    action: "Create policy",
+    columns: [
+      ["name", "Backup"],
+      ["target", "Server"],
+      ["size", "Size"],
+      ["schedule", "Schedule"],
+      ["started", "Last run"],
+      ["status", "Status"],
+    ],
+    fields: [
+      { key: "name", label: "Policy name", required: true },
+      { key: "target", label: "Server", options: ["eu-central-01", "us-east-01", "eu-west-01"] },
+      {
+        key: "schedule",
+        label: "Schedule",
+        options: ["Daily at 02:00 UTC", "Every 6 hours", "Weekly on Sunday"],
+      },
+      { key: "retention", label: "Retention (days)", type: "number" },
+      {
+        key: "destination",
+        label: "Destination",
+        options: ["S3-compatible storage", "Local volume"],
+      },
+    ],
+  },
+};
+const rec = (
+  id: string,
+  name: string,
+  status: string,
+  extra: Record<string, string>,
+): MailRecord => ({ id, name, status, ...extra });
+export const initialData: Record<string, MailRecord[]> = {
+  servers: [
+    rec("s1", "eu-central-01", "Healthy", {
+      hostname: "mail.acme.studio",
+      location: "Frankfurt, DE",
+      ip: "203.0.113.10",
+      domains: "4",
+      usage: "24% / 3.2 GB",
+      cpu: "4",
+      memory: "8",
+      disk: "160",
+      environment: "Production",
+    }),
+    rec("s2", "us-east-01", "Healthy", {
+      hostname: "mail.getnimbus.io",
+      location: "Virginia, US",
+      ip: "203.0.113.22",
+      domains: "3",
+      usage: "18% / 2.8 GB",
+      cpu: "4",
+      memory: "8",
+      disk: "160",
+      environment: "Production",
+    }),
+    rec("s3", "eu-west-01", "Degraded", {
+      hostname: "mail.orbit.design",
+      location: "Amsterdam, NL",
+      ip: "203.0.113.34",
+      domains: "1",
+      usage: "12% / 1.6 GB",
+      cpu: "2",
+      memory: "4",
+      disk: "80",
+      environment: "Production",
+    }),
+  ],
+  domains: [
+    rec("d1", "acme.studio", "Active", {
+      server: "eu-central-01",
+      mailboxes: "48",
+      storage: "18.4 / 50 GB",
+      dns: "6 / 6 verified",
+      provider: "Manual",
+    }),
+    rec("d2", "getnimbus.io", "Active", {
+      server: "us-east-01",
+      mailboxes: "32",
+      storage: "12.1 / 50 GB",
+      dns: "6 / 6 verified",
+    }),
+    rec("d3", "orbit.design", "Degraded", {
+      server: "eu-west-01",
+      mailboxes: "16",
+      storage: "7.3 / 25 GB",
+      dns: "5 / 6 verified",
+    }),
+    rec("d4", "northstar.dev", "Active", {
+      server: "eu-central-01",
+      mailboxes: "24",
+      storage: "8.6 / 50 GB",
+      dns: "6 / 6 verified",
+    }),
+    rec("d5", "formandfield.co", "Active", {
+      server: "eu-central-01",
+      mailboxes: "12",
+      storage: "3.2 / 25 GB",
+      dns: "6 / 6 verified",
+    }),
+    rec("d6", "tryrelay.app", "Active", {
+      server: "us-east-01",
+      mailboxes: "8",
+      storage: "1.4 / 25 GB",
+      dns: "6 / 6 verified",
+    }),
+    rec("d7", "mono.works", "Active", {
+      server: "us-east-01",
+      mailboxes: "10",
+      storage: "2.8 / 25 GB",
+      dns: "6 / 6 verified",
+    }),
+    rec("d8", "helloatlas.co", "Pending", {
+      server: "eu-central-01",
+      mailboxes: "0",
+      storage: "0 / 25 GB",
+      dns: "Awaiting ownership",
+    }),
+  ],
+  dns: [
+    rec("dns1", "acme.studio", "Verified", {
+      type: "MX",
+      value: "10 mail.acme.studio",
+      observed: "Matches",
+      ttl: "3600",
+    }),
+    rec("dns2", "mail.acme.studio", "Verified", {
+      type: "A",
+      value: "203.0.113.10",
+      observed: "Matches",
+      ttl: "3600",
+    }),
+    rec("dns3", "acme.studio", "Verified", {
+      type: "TXT",
+      value: "v=spf1 mx -all",
+      observed: "Matches",
+      ttl: "3600",
+    }),
+    rec("dns4", "dkim._domainkey.acme.studio", "Verified", {
+      type: "TXT",
+      value: "v=DKIM1; k=rsa; p=…",
+      observed: "Matches",
+      ttl: "3600",
+    }),
+    rec("dns5", "_dmarc.acme.studio", "Verified", {
+      type: "TXT",
+      value: "v=DMARC1; p=quarantine",
+      observed: "Matches",
+      ttl: "3600",
+    }),
+    rec("dns6", "_dmarc.orbit.design", "Missing", {
+      type: "TXT",
+      value: "v=DMARC1; p=quarantine",
+      observed: "Not found",
+      ttl: "3600",
+    }),
+  ],
+  mailboxes: [
+    rec("m1", "alex@acme.studio", "Active", {
+      displayName: "Alex Morgan",
+      server: "eu-central-01",
+      storage: "2.4 / 5 GB",
+      lastLogin: "12 minutes ago",
+      quota: "5",
+    }),
+    rec("m2", "hello@acme.studio", "Active", {
+      displayName: "Studio inbox",
+      server: "eu-central-01",
+      storage: "1.8 / 10 GB",
+      lastLogin: "1 hour ago",
+      quota: "10",
+    }),
+    rec("m3", "sam@getnimbus.io", "Active", {
+      displayName: "Sam Chen",
+      server: "us-east-01",
+      storage: "0.8 / 5 GB",
+      lastLogin: "28 minutes ago",
+      quota: "5",
+    }),
+    rec("m4", "team@orbit.design", "Active", {
+      displayName: "Orbit team",
+      server: "eu-west-01",
+      storage: "4.2 / 5 GB",
+      lastLogin: "2 hours ago",
+      quota: "5",
+    }),
+    rec("m5", "billing@acme.studio", "Suspended", {
+      displayName: "Billing",
+      server: "eu-central-01",
+      storage: "0.6 / 5 GB",
+      lastLogin: "3 days ago",
+      quota: "5",
+    }),
+  ],
+  aliases: [
+    rec("a1", "support@acme.studio", "Active", {
+      destination: "hello@acme.studio",
+      domain: "acme.studio",
+    }),
+    rec("a2", "press@getnimbus.io", "Active", {
+      destination: "sam@getnimbus.io",
+      domain: "getnimbus.io",
+    }),
+    rec("a3", "contact@orbit.design", "Active", {
+      destination: "team@orbit.design",
+      domain: "orbit.design",
+    }),
+  ],
+  routing: [
+    rec("r1", "Customer support", "Active", {
+      match: "support@acme.studio",
+      destination: "hello@acme.studio",
+      priority: "10",
+      type: "Forwarding",
+    }),
+    rec("r2", "Outbound relay", "Active", {
+      match: "*@getnimbus.io",
+      destination: "us-east-01",
+      priority: "20",
+      type: "Relay",
+    }),
+  ],
+  jobs: [
+    rec("j1", "Renew TLS certificate", "Completed", {
+      target: "eu-central-01",
+      progress: "100%",
+      started: "Today, 09:42",
+    }),
+    rec("j2", "Provision mailbox", "Completed", {
+      target: "alex@acme.studio",
+      progress: "100%",
+      started: "Today, 09:38",
+    }),
+    rec("j3", "Validate domain DNS", "Failed", {
+      target: "orbit.design",
+      progress: "83%",
+      started: "Today, 09:31",
+    }),
+    rec("j4", "Scheduled backup", "Completed", {
+      target: "us-east-01",
+      progress: "100%",
+      started: "Today, 02:00",
+    }),
+  ],
+  audit: [
+    rec("l1", "Mailbox created", "Success", {
+      actor: "Alex Morgan",
+      target: "alex@acme.studio",
+      started: "Oct 13, 09:38 UTC",
+    }),
+    rec("l2", "Domain DNS checked", "Warning", {
+      actor: "System",
+      target: "orbit.design",
+      started: "Oct 13, 09:31 UTC",
+    }),
+    rec("l3", "User permissions updated", "Success", {
+      actor: "Alex Morgan",
+      target: "Sam Chen",
+      started: "Oct 12, 16:20 UTC",
+    }),
+    rec("l4", "Server registered", "Success", {
+      actor: "Alex Morgan",
+      target: "eu-west-01",
+      started: "Oct 12, 11:05 UTC",
+    }),
+  ],
+  users: [
+    rec("u1", "Alex Morgan", "Active", {
+      email: "alex@acme.studio",
+      role: "Super Administrator",
+      scope: "All resources",
+      lastLogin: "Now",
+    }),
+    rec("u2", "Sam Chen", "Active", {
+      email: "sam@getnimbus.io",
+      role: "Server Administrator",
+      scope: "us-east-01",
+      lastLogin: "28 minutes ago",
+    }),
+    rec("u3", "Jamie Park", "Invited", {
+      email: "jamie@orbit.design",
+      role: "Domain Administrator",
+      scope: "orbit.design",
+      lastLogin: "Never",
+    }),
+  ],
+  backups: [
+    rec("b1", "Daily infrastructure backup", "Completed", {
+      target: "eu-central-01",
+      size: "18.4 GB",
+      schedule: "Daily at 02:00 UTC",
+      started: "Today, 02:00",
+    }),
+    rec("b2", "Nimbus daily backup", "Completed", {
+      target: "us-east-01",
+      size: "12.1 GB",
+      schedule: "Daily at 02:00 UTC",
+      started: "Today, 02:00",
+    }),
+    rec("b3", "Orbit daily backup", "Pending", {
+      target: "eu-west-01",
+      size: "—",
+      schedule: "Daily at 02:00 UTC",
+      started: "Not yet run",
+    }),
+  ],
+  providers: [
+    rec("p1", "Cloudflare", "Not connected", {
+      type: "API",
+      zone: "Not configured",
+      records: "—",
+      capability: "Zone-scoped DNS edits",
+    }),
+    rec("p2", "Manual", "Available", {
+      type: "Any provider",
+      zone: "Everywhere",
+      records: "8 active",
+      capability: "Copy & verify records",
+    }),
+    rec("p3", "Amazon Route 53", "Not connected", {
+      type: "API",
+      zone: "Not configured",
+      records: "—",
+      capability: "Zone-scoped DNS edits",
+    }),
+  ],
+};
+export function statusKind(status: string) {
+  return ["Healthy", "Active", "Verified", "Success", "Completed"].includes(status)
+    ? "healthy"
+    : ["Degraded", "Warning", "Missing"].includes(status)
+      ? "warning"
+      : ["Failed", "Suspended"].includes(status)
+        ? "error"
+        : "pending";
+}
 export const routeMeta = (title: string, description: string) => ({
   meta: [
     { title: `${title} · DevMail — Mail infrastructure` },

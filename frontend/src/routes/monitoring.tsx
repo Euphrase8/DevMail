@@ -1,5 +1,5 @@
 import { createFileRoute } from "@tanstack/react-router";
-import { MonitoringView } from "@/components/mail/monitoring/monitoring-view";
+import { MonitoringPage } from "@/components/mail/monitoring/monitoring-page";
 import { routeMeta } from "@/lib/mail/data";
 export const Route = createFileRoute("/monitoring")({
   head: () =>
@@ -7,5 +7,5 @@ export const Route = createFileRoute("/monitoring")({
       "Monitoring",
       "Mail delivery, service availability, server resources and security alerts.",
     ),
-  component: MonitoringView,
+  component: MonitoringPage,
 });

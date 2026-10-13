@@ -1,6 +1,10 @@
 import { createFileRoute } from "@tanstack/react-router";
-import { ApiResourcePage } from "@/components/mail/resources/api-resource-page";
-export const Route = createFileRoute("/domains")({ component: Page });
+import { ResourcePage } from "@/components/mail/resources/resource-page";
+import { modules, routeMeta } from "@/lib/mail/data";
+export const Route = createFileRoute("/domains")({
+  head: () => routeMeta(modules["domains"]!.title, modules["domains"]!.description),
+  component: Page,
+});
 function Page() {
-  return <ApiResourcePage kind="domains" />;
+  return <ResourcePage section="domains" />;
 }

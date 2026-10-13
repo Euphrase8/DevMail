@@ -78,7 +78,7 @@ export function WebmailPage() {
             not grant mailbox access. Single sign-on requires a supported, connected integration.
           </p>
           <p className="mt-5 text-xs text-warning">
-            Webmail is opened through the configured external mail-suite endpoint.
+            This preview is not connected to a live mail server.
           </p>
         </div>
       </div>

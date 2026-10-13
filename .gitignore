@@ -11,6 +11,7 @@ dist-ssr/
 
 # Go backend build artifacts
 backend/bin/
+tmp-devmail-api.exe
 
 # TanStack generated artifacts
 .tanstack/
