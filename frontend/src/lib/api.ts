@@ -220,8 +220,36 @@ export type DnsProvider = {
 };
 
 export type JobResult = { type: string; name: string; status: string; detail: string };
+export type OpsResource = {
+  id: string;
+  name: string;
+  enabled: boolean;
+  config: Record<string, string>;
+  createdAt: string;
+};
+export type OpsRun = {
+  id?: string;
+  status: string;
+  detail: string;
+  bytes?: number;
+  createdAt?: string;
+};
+export type OpsKind = "routing-rules" | "backups" | "notifications";
 
 export const api = {
+  listOps: (kind: OpsKind) => request<OpsResource[]>(`/${kind}`),
+  saveOps: (kind: OpsKind, payload: Omit<OpsResource, "id" | "createdAt">, id?: string) =>
+    request<OpsResource>(`/${kind}${id ? `/${id}` : ""}`, {
+      method: id ? "PATCH" : "POST",
+      body: JSON.stringify(payload),
+    }),
+  deleteOps: (kind: OpsKind, id: string) =>
+    request<{ ok: boolean }>(`/${kind}/${id}`, { method: "DELETE" }),
+  runBackup: (id: string) => request<OpsRun>(`/backups/${id}/run`, { method: "POST" }),
+  backupRuns: (id: string) => request<OpsRun[]>(`/backups/${id}/runs`),
+  testNotification: (id: string) =>
+    request<OpsRun>(`/notifications/${id}/test`, { method: "POST" }),
+  notificationEvents: (id: string) => request<OpsRun[]>(`/notifications/${id}/events`),
   // Health + auth
   health: () => request<{ status: string; db: string; time: string; version: string }>("/health"),
   authStatus: () => request<{ hasUsers: boolean }>("/auth/status"),

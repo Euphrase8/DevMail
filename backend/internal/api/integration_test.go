@@ -75,6 +75,18 @@ func TestProvisioningIntegration(t *testing.T) {
 	credentials := `{"email":"admin@example.test","name":"Admin","password":"Strong-test-password-123"}`
 	call("POST", "/auth/setup", credentials, 201)
 	call("POST", "/auth/login", credentials, 200)
+	rule := call("POST", "/routing-rules", `{"name":"Forward","enabled":true,"config":{"source":"a@example.test","destination":"b@example.test"}}`, 201)["id"].(string)
+	call("PATCH", "/routing-rules/"+rule, `{"name":"Updated","enabled":false,"config":{"source":"a@example.test","destination":"c@example.test"}}`, 200)
+	call("DELETE", "/routing-rules/"+rule, "", 200)
+	backup := call("POST", "/backups", `{"name":"Database","enabled":true,"config":{"kind":"postgres"}}`, 201)["id"].(string)
+	result := call("POST", "/backups/"+backup+"/run", "", 200)
+	if result["status"] != "failed" {
+		t.Fatal("unconfigured backup claimed success")
+	}
+	channel := call("POST", "/notifications", `{"name":"Webhook","enabled":true,"config":{"url":"http://127.0.0.1:1/private-secret"}}`, 201)["id"].(string)
+	if result = call("POST", "/notifications/"+channel+"/test", "", 200); result["status"] != "failed" {
+		t.Fatal("SSRF endpoint accepted")
+	}
 	domain := call("POST", "/domains", `{"name":"integration.example.test"}`, 201)["id"].(string)
 	mailbox := call("POST", "/domains/"+domain+"/mailboxes", `{"local":"alice","password":"Strong-test-password-123","quotaBytes":1024}`, 201)["id"].(string)
 	deadline := time.Now().Add(8 * time.Second)

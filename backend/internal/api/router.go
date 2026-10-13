@@ -11,6 +11,7 @@ import (
 
 	"github.com/Euphrase8/DevMail/backend/internal/audit"
 	"github.com/Euphrase8/DevMail/backend/internal/auth"
+	"github.com/Euphrase8/DevMail/backend/internal/backups"
 	"github.com/Euphrase8/DevMail/backend/internal/config"
 	"github.com/Euphrase8/DevMail/backend/internal/dns"
 	"github.com/Euphrase8/DevMail/backend/internal/domains"
@@ -19,7 +20,9 @@ import (
 	"github.com/Euphrase8/DevMail/backend/internal/jobs"
 	"github.com/Euphrase8/DevMail/backend/internal/mailboxes"
 	"github.com/Euphrase8/DevMail/backend/internal/monitoring"
+	"github.com/Euphrase8/DevMail/backend/internal/notifications"
 	"github.com/Euphrase8/DevMail/backend/internal/providers"
+	"github.com/Euphrase8/DevMail/backend/internal/routing"
 	"github.com/Euphrase8/DevMail/backend/internal/servers"
 	"github.com/Euphrase8/DevMail/backend/internal/settings"
 	"github.com/gin-gonic/gin"
@@ -101,6 +104,9 @@ func NewRouter(opts Options) *gin.Engine {
 	monitoring.NewHandler(opts.Pool).RegisterRoutes(v1, authMw)
 	audit.NewHandler(opts.Pool).RegisterRoutes(v1, authMw)
 	jobs.NewHandler(jobsSvc, rec).RegisterRoutes(v1, authMw)
+	routing.Register(v1, opts.Pool, authMw, auth.RequireRole(auth.RoleDomainAdmin))
+	backups.Register(v1, opts.Pool, backups.PGDump{Binary: opts.Config.PGDumpPath, Directory: opts.Config.BackupDirectory, DatabaseURL: opts.Config.DatabaseURL}, authMw, auth.RequireRole(auth.RoleSuperAdmin))
+	notifications.Register(v1, opts.Pool, opts.Config.SecretKey, notifications.Webhook{AllowPrivate: opts.Config.AllowPrivateNetworks}, authMw, auth.RequireRole(auth.RoleServerAdmin))
 
 	registerProvisioningConsumers(jobsSvc, opts.MailEngine, mailboxesHandler.Service(),
 		domainsHandler.Service(), dnsHandler.Service())

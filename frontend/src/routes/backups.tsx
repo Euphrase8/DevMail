@@ -1,10 +1,6 @@
 import { createFileRoute } from "@tanstack/react-router";
-import { ResourcePage } from "@/components/mail/resources/resource-page";
-import { modules, routeMeta } from "@/lib/mail/data";
-export const Route = createFileRoute("/backups")({
-  head: () => routeMeta(modules["backups"]!.title, modules["backups"]!.description),
-  component: Page,
-});
+import { OpsPage } from "@/components/mail/resources/ops-page";
+export const Route = createFileRoute("/backups")({ component: Page });
 function Page() {
-  return <ResourcePage section="backups" />;
+  return <OpsPage kind="backups" />;
 }

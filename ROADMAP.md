@@ -253,7 +253,7 @@ the engine reflects it (or reports an honest *unmanaged* state when unconfigured
 
 Adapter boundary: SQL provisioning is verified against PostgreSQL. SMTP/IMAP delivery requires external Dovecot/Postfix configured to consume `engine_*` tables. Engine selection is persisted through settings and takes effect after restart; explicit `MAIL_ENGINE` overrides it.
 
-### Phase 12 — Routing, backups, notifications  `[ ]`
+### Phase 12 — Routing, backups, notifications  `[x]`
 **Goal:** back the remaining fixture screens.
 
 **Migration `0004_ops.sql`:** `routing_rules`, `backup_targets`, `backup_runs`,
@@ -265,11 +265,11 @@ Adapter boundary: SQL provisioning is verified against PostgreSQL. SMTP/IMAP del
 - `GET/POST/PATCH/DELETE /api/v1/notifications` + `POST /api/v1/notifications/:id/test`
 
 **Tasks**
-- [ ] Routing-rule service + validation.
-- [ ] Backup adapter boundary (external prerequisite — mark `[!]` until a backend tool
+- [x] Routing-rule service + validation.
+- [x] Backup adapter boundary (external prerequisite — resolved with PostgreSQL pg_dump; a backend tool
       such as `pg_dump`/`rsync`/`borg` is chosen); SSRF-safe, secrets never logged.
-- [ ] Notification dispatch interface (webhook first; email later).
-- [ ] Frontend: `routing.tsx`, `backups.tsx`, `notifications.tsx`.
+- [x] Notification dispatch interface (webhook first; email later).
+- [x] Frontend: `routing.tsx`, `backups.tsx`, `notifications.tsx`.
 
 **Verification:** `go test ./...`; a routing rule persists; a notification `test`
 fires to the configured channel.
@@ -355,3 +355,5 @@ works; login events appear in `/audit`.
 | 2026-10-13 | audit | Re-audited gap analysis A–F against live tree; captured omitted gaps (servers/domains/users write-side wiring, mailboxes/aliases fully sample, settings+audit wiring, monitoring tiles) and corrected § E migration/pagination status; expanded Phase 14 | full-route enumeration vs `store.tsx`/`api.ts`/`router.go`; `auth` package has no `audit.Record`; `main.go` still `NoopEngine` | `138ac0c` |
 
 | 2026-10-13 | 11 | Durable mailbox/alias outbox, SQL adapter, restart/retry polling, provisioning API and mailbox/alias UI; application index | `go test ./...` with PostgreSQL HTTP integration PASS; `go vet ./...` PASS; live API CRUD/provision/teardown PASS; lint 0 errors (8 warnings), frontend 18/18, typecheck and build PASS | phase-11 commit |
+
+| 2026-10-13 | 12 | Modular routing rules, pg_dump database backups with checksum/run history, encrypted SSRF-safe webhook notifications and live screens | PostgreSQL HTTP integration PASS; real pg_dump archive test PASS; webhook delivery/network/redirect tests PASS; full Go tests/vet PASS; frontend lint 0 errors, 18/18 tests, typecheck PASS | phase-12 commit |
