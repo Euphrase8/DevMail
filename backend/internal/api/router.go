@@ -14,6 +14,7 @@ import (
 	"github.com/Euphrase8/DevMail/backend/internal/config"
 	"github.com/Euphrase8/DevMail/backend/internal/dns"
 	"github.com/Euphrase8/DevMail/backend/internal/domains"
+	"github.com/Euphrase8/DevMail/backend/internal/engine"
 	"github.com/Euphrase8/DevMail/backend/internal/httpapi"
 	"github.com/Euphrase8/DevMail/backend/internal/jobs"
 	"github.com/Euphrase8/DevMail/backend/internal/mailboxes"
@@ -27,15 +28,19 @@ import (
 
 // Options wires the router to its dependencies.
 type Options struct {
+	Context    context.Context
 	Pool       *pgxpool.Pool
 	Config     *config.Config
 	Logger     *slog.Logger
-	MailEngine mailboxes.Engine
+	MailEngine engine.Engine
 }
 
 // NewRouter assembles the full API. The mail-engine status route reports
 // "not_configured" rather than pretending provisioning is live.
 func NewRouter(opts Options) *gin.Engine {
+	if opts.MailEngine == nil {
+		opts.MailEngine = engine.Noop{}
+	}
 	gin.SetMode(gin.ReleaseMode)
 	r := gin.New()
 	r.Use(httpapi.RecoverMiddleware(opts.Logger), httpapi.RequestIDMiddleware(opts.Logger),
@@ -67,17 +72,41 @@ func NewRouter(opts Options) *gin.Engine {
 	// Auth module owns its own public + protected routes.
 	auth.Register(v1, opts.Pool, authMw)
 
+	// One jobs service is shared by the HTTP handler and the provisioning
+	// consumers so both operate on the same registry and worker.
+	jobsSvc := jobs.NewService(opts.Pool, opts.Logger)
+	var enqueue func(context.Context, string, map[string]string) error
+	if opts.MailEngine != nil && opts.MailEngine.Configured() {
+		enqueue = func(ctx context.Context, kind string, payload map[string]string) error {
+			_, err := jobsSvc.Enqueue(ctx, kind, payload)
+			return err
+		}
+	}
+
 	// Admin resources: everything under /api/v1 is authenticated.
 	servers.NewHandler(opts.Pool, rec, opts.Config.AllowPrivateNetworks).RegisterRoutes(v1, authMw)
-	domains.NewHandler(opts.Pool, rec).RegisterRoutes(v1, authMw)
-	mailboxes.NewHandler(opts.Pool, rec, opts.MailEngine).RegisterRoutes(v1, authMw)
+	domainsHandler := domains.NewHandler(opts.Pool, rec, enqueue)
+	domainsHandler.RegisterRoutes(v1, authMw)
+	mailboxesHandler := mailboxes.NewHandler(opts.Pool, rec, opts.MailEngine, enqueue)
+	mailboxesHandler.RegisterRoutes(v1, authMw)
+	_, err := opts.Pool.Exec(context.Background(), `INSERT INTO settings(key,value) VALUES ('provisioning_enabled',to_jsonb($1::boolean)) ON CONFLICT(key) DO UPDATE SET value=EXCLUDED.value`, opts.MailEngine.Configured())
+	if err != nil {
+		panic("cannot configure durable provisioning")
+	}
 	providersHandler := providers.NewHandler(opts.Pool, opts.Config.SecretKey, rec)
 	providersHandler.RegisterRoutes(v1, authMw)
-	dns.NewHandler(opts.Pool, rec, providersHandler.Service(), opts.Config.SecretKey).RegisterRoutes(v1, authMw)
+	dnsHandler := dns.NewHandler(opts.Pool, rec, providersHandler.Service(), opts.Config.SecretKey)
+	dnsHandler.RegisterRoutes(v1, authMw)
 	settings.NewHandler(opts.Pool).RegisterRoutes(v1, authMw)
 	monitoring.NewHandler(opts.Pool).RegisterRoutes(v1, authMw)
 	audit.NewHandler(opts.Pool).RegisterRoutes(v1, authMw)
-	jobs.NewHandler(opts.Pool, opts.Logger, rec).RegisterRoutes(v1, authMw)
+	jobs.NewHandler(jobsSvc, rec).RegisterRoutes(v1, authMw)
+
+	registerProvisioningConsumers(jobsSvc, opts.MailEngine, mailboxesHandler.Service(),
+		domainsHandler.Service(), dnsHandler.Service())
+	if opts.Context != nil {
+		jobsSvc.Start(opts.Context)
+	}
 
 	return r
 }

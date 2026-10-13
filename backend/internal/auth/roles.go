@@ -8,14 +8,14 @@ import "strings"
 type Role string
 
 const (
-	RoleSuperAdmin Role = "super_admin"
+	RoleSuperAdmin  Role = "super_admin"
 	RoleServerAdmin Role = "server_admin"
 	RoleDomainAdmin Role = "domain_admin"
 	RoleOperator    Role = "operator"
 )
 
 var ranks = map[Role]int{
-	RoleSuperAdmin: 4,
+	RoleSuperAdmin:  4,
 	RoleServerAdmin: 3,
 	RoleDomainAdmin: 2,
 	RoleOperator:    1,

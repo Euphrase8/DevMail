@@ -20,8 +20,13 @@ type Config struct {
 	// credentials and private keys at rest. Override in production.
 	SecretKey string
 
+	// MailEngine selects the provisioning adapter: "none" (default, records
+	// only) or "sql" (Dovecot/Postfix-style virtual users written to the
+	// engine_* tables). A real mail server consumes the SQL rows.
+	MailEngine string
+
 	// Timeouts used by connectivity/DNS checks.
-	DialTimeout    time.Duration
+	DialTimeout     time.Duration
 	ResolverTimeout time.Duration
 }
 
@@ -33,6 +38,7 @@ func Load() Config {
 		AllowPrivateNetworks: getenv("ALLOW_PRIVATE_NETWORKS", "false") == "true",
 		Env:                  getenv("APP_ENV", "development"),
 		SecretKey:            getenv("SECRET_KEY", "devmail-insecure-dev-key-change-me"),
+		MailEngine:           getenv("MAIL_ENGINE", "none"),
 		DialTimeout:          5 * time.Second,
 		ResolverTimeout:      5 * time.Second,
 	}

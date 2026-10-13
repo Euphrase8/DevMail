@@ -1,30 +1,22 @@
-import { useState } from 'react';
-import { Bell, Check, Mail, Save } from 'lucide-react';
-import { Button } from '@/components/ui/button';
-import { useMail } from '../store';
+import { useState } from "react";
+import { Bell, Check, Mail, Save } from "lucide-react";
+import { Button } from "@/components/ui/button";
+import { useMail } from "../store";
 
 const events = [
-  { id: 'delivery', label: 'Delivery failures', severity: 'critical' },
-  { id: 'tls', label: 'TLS certificate warnings', severity: 'warning' },
-  { id: 'dns', label: 'DNS validation warnings', severity: 'warning' },
-  { id: 'server', label: 'Server offline or degraded', severity: 'critical' },
-  { id: 'backup', label: 'Backup failures', severity: 'critical' },
-  { id: 'quota', label: 'Mailbox quota exceeded', severity: 'warning' },
+  { id: "delivery", label: "Delivery failures", severity: "critical" },
+  { id: "tls", label: "TLS certificate warnings", severity: "warning" },
+  { id: "dns", label: "DNS validation warnings", severity: "warning" },
+  { id: "server", label: "Server offline or degraded", severity: "critical" },
+  { id: "backup", label: "Backup failures", severity: "critical" },
+  { id: "quota", label: "Mailbox quota exceeded", severity: "warning" },
 ] as const;
 
-function Toggle({
-  on,
-  label,
-  onClick,
-}: {
-  on: boolean;
-  label: string;
-  onClick: () => void;
-}) {
+function Toggle({ on, label, onClick }: { on: boolean; label: string; onClick: () => void }) {
   return (
     <Button
       type="button"
-      variant={on ? 'default' : 'outline'}
+      variant={on ? "default" : "outline"}
       size="sm"
       className="h-7 min-w-16 text-[11px]"
       aria-pressed={on}
@@ -38,12 +30,12 @@ function Toggle({
 
 export function NotificationsPage() {
   const { settings, setSetting, notify } = useMail();
-  const [email, setEmail] = useState(settings['notifications'] === 'On');
+  const [email, setEmail] = useState(settings["notifications"] === "On");
   const [webhook, setWebhook] = useState(false);
-  const [alertEmail, setAlertEmail] = useState('');
-  const [webhookUrl, setWebhookUrl] = useState('');
+  const [alertEmail, setAlertEmail] = useState("");
+  const [webhookUrl, setWebhookUrl] = useState("");
   const [rules, setRules] = useState<Record<string, boolean>>(() =>
-    Object.fromEntries(events.map((e) => [`${e.id}-email`, e.severity === 'critical'])),
+    Object.fromEntries(events.map((e) => [`${e.id}-email`, e.severity === "critical"])),
   );
 
   const toggleRule = (key: string) => setRules((old) => ({ ...old, [key]: !old[key] }));
@@ -52,10 +44,12 @@ export function NotificationsPage() {
   const rulesOn = Object.values(rules).filter(Boolean).length;
 
   const save = () => {
-    setSetting('notifications', email ? 'On' : 'Off');
-    setSetting('alertEmail', alertEmail);
-    setSetting('webhook', webhookUrl);
-    notify('Sample notification preferences saved for this session. Delivery requires a connected backend.');
+    setSetting("notifications", email ? "On" : "Off");
+    setSetting("alertEmail", alertEmail);
+    setSetting("webhook", webhookUrl);
+    notify(
+      "Sample notification preferences saved for this session. Delivery requires a connected backend.",
+    );
   };
 
   return (
@@ -70,10 +64,10 @@ export function NotificationsPage() {
 
       <div className="mt-8 grid grid-cols-2 border-y border-border py-6 lg:grid-cols-4">
         {[
-          ['TRACKED EVENTS', String(events.length), 'Delivery, TLS, DNS, servers, backups'],
-          ['CHANNELS ON', String(channelsOn), email ? 'Email active' : 'None yet'],
-          ['RULES ACTIVE', String(rulesOn), `${events.length * 2 - rulesOn} muted`],
-          ['SEVERITY', '2', 'Warning and critical'],
+          ["TRACKED EVENTS", String(events.length), "Delivery, TLS, DNS, servers, backups"],
+          ["CHANNELS ON", String(channelsOn), email ? "Email active" : "None yet"],
+          ["RULES ACTIVE", String(rulesOn), `${events.length * 2 - rulesOn} muted`],
+          ["SEVERITY", "2", "Warning and critical"],
         ].map(([l, v, d]) => (
           <div key={l} className="metric">
             <div className="eyebrow">{l}</div>
@@ -152,8 +146,8 @@ export function NotificationsPage() {
                   className="grid grid-cols-[minmax(0,1fr)_70px_auto_auto] items-center gap-3 border-b border-border py-3 text-xs"
                 >
                   <span>{e.label}</span>
-                  <span className={e.severity === 'critical' ? 'text-destructive' : 'text-warning'}>
-                    {e.severity === 'critical' ? 'Critical' : 'Warning'}
+                  <span className={e.severity === "critical" ? "text-destructive" : "text-warning"}>
+                    {e.severity === "critical" ? "Critical" : "Warning"}
                   </span>
                   <input
                     type="checkbox"
@@ -173,13 +167,16 @@ export function NotificationsPage() {
           </div>
           <p className="mt-4 flex items-start gap-2 text-[11px] leading-5 text-warning">
             <Mail className="mt-0.5 size-3.5 shrink-0" />
-            Nothing is delivered in this preview. Real notifications require the connecting backend service.
+            Nothing is delivered in this preview. Real notifications require the connecting backend
+            service.
           </p>
         </section>
       </div>
 
       <div className="mt-8 flex items-center justify-between gap-4">
-        <p className="text-[11px] text-muted-foreground">Frontend preferences only · sensitive endpoints are never shared with the browser.</p>
+        <p className="text-[11px] text-muted-foreground">
+          Frontend preferences only · sensitive endpoints are never shared with the browser.
+        </p>
         <Button size="sm" onClick={save}>
           <Save />
           Save preferences

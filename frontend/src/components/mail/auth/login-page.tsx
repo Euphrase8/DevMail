@@ -92,7 +92,9 @@ export function LoginPage() {
       queryClient.invalidateQueries({ queryKey: ["health"] });
       navigate({ to: "/" });
     } catch (err) {
-      setError(err instanceof ApiError ? err.message : "Could not reach the API. Is the backend running?");
+      setError(
+        err instanceof ApiError ? err.message : "Could not reach the API. Is the backend running?",
+      );
     } finally {
       setBusy(false);
     }
@@ -131,7 +133,13 @@ export function LoginPage() {
               {mode === "bootstrap" && (
                 <label className="block">
                   Administrator name
-                  <input type="text" name="name" required autoComplete="name" placeholder="Ops Admin" />
+                  <input
+                    type="text"
+                    name="name"
+                    required
+                    autoComplete="name"
+                    placeholder="Ops Admin"
+                  />
                 </label>
               )}
               {mode !== "mfa" && (
@@ -311,7 +319,13 @@ export function LoginPage() {
             </svg>
 
             <div className="absolute left-1/2 top-1/2 grid h-14 w-14 -translate-x-1/2 -translate-y-1/2 place-items-center rounded-full border border-white/15 bg-white/5 backdrop-blur">
-              <svg width="22" height="24" viewBox="0 0 25 27" aria-hidden className="text-[oklch(0.7_0.17_33)]">
+              <svg
+                width="22"
+                height="24"
+                viewBox="0 0 25 27"
+                aria-hidden
+                className="text-[oklch(0.7_0.17_33)]"
+              >
                 <path
                   d="M2 7 12.5 1 23 7 12.5 13ZM2 13 12.5 19 23 13M2 19 12.5 25 23 19"
                   stroke="currentColor"

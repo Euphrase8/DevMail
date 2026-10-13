@@ -227,7 +227,7 @@ apply against a mock/manual provider produces idempotent upserts.
 
 ---
 
-### Phase 11 — Real mail engine + provisioning pipeline  `[ ]`
+### Phase 11 — Real mail engine + provisioning pipeline  `[x]`
 **Goal:** replace `NoopEngine`; make provisioning real and asynchronous.
 
 **Migration `0003_provisioning.sql`:** engine config binding; mailbox provisioning state.
@@ -238,17 +238,20 @@ apply against a mock/manual provider produces idempotent upserts.
 - `GET  /api/v1/mailboxes/:mailbox_id/provisioning` → per-mailbox state.
 
 **Tasks**
-- [ ] Define `Engine` interface (`EnsureDomain`, `CreateMailbox`, `SetPassword`,
+- [x] Define `Engine` interface (`EnsureDomain`, `CreateMailbox`, `SetPassword`,
       `DeleteMailbox`, `CreateAlias`, `DeleteAlias`, `Status`).
-- [ ] Implement at least one real adapter (e.g. Dovecot `userdb`/SQL or command adapter),
+- [x] Implement at least one real adapter (e.g. Dovecot `userdb`/SQL or command adapter),
       selectable via settings.
-- [ ] Worker: real consumers with retry + backoff + idempotency keys.
-- [ ] Frontend: provisioning status surfacing.
+- [x] Worker: real consumers with retry + backoff + idempotency keys.
+- [x] Frontend: provisioning status surfacing.
 
 **Verification:** `go test ./...`; creating a mailbox enqueues + completes a job and
 the engine reflects it (or reports an honest *unmanaged* state when unconfigured).
 
 ---
+
+
+Adapter boundary: SQL provisioning is verified against PostgreSQL. SMTP/IMAP delivery requires external Dovecot/Postfix configured to consume `engine_*` tables. Engine selection is persisted through settings and takes effect after restart; explicit `MAIL_ENGINE` overrides it.
 
 ### Phase 12 — Routing, backups, notifications  `[ ]`
 **Goal:** back the remaining fixture screens.
@@ -350,3 +353,5 @@ works; login events appear in `/audit`.
 | 2026-10-13 | 10 | DNS records + provider adapters: secretbox, migration `0002_dns`, `internal/providers` (manual + Cloudflare), `internal/dns` + DKIM | live e2e: plan 6→7 records, DKIM pubLen 392, manual apply, jobs `succeeded` | `4ebb81c` |
 | 2026-10-13 | 9/10 | Frontend wiring: api.ts methods, `dns-page`, `providers-page`, `jobs-page`, `server-health-panel`, route wiring | `npx tsc --noEmit` clean; `npm test` 18/18; `npm run build` ok; `eslint --fix` clean | `4ebb81c` |
 | 2026-10-13 | audit | Re-audited gap analysis A–F against live tree; captured omitted gaps (servers/domains/users write-side wiring, mailboxes/aliases fully sample, settings+audit wiring, monitoring tiles) and corrected § E migration/pagination status; expanded Phase 14 | full-route enumeration vs `store.tsx`/`api.ts`/`router.go`; `auth` package has no `audit.Record`; `main.go` still `NoopEngine` | `138ac0c` |
+
+| 2026-10-13 | 11 | Durable mailbox/alias outbox, SQL adapter, restart/retry polling, provisioning API and mailbox/alias UI; application index | `go test ./...` with PostgreSQL HTTP integration PASS; `go vet ./...` PASS; live API CRUD/provision/teardown PASS; lint 0 errors (8 warnings), frontend 18/18, typecheck and build PASS | phase-11 commit |

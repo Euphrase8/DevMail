@@ -274,6 +274,12 @@ export const api = {
 
   // Mailboxes + aliases
   engineStatus: () => request<{ configured: boolean; name: string }>("/mailboxes/engine"),
+  mailboxProvisioning: (id: string) =>
+    request<{ status: string; error: string; lastProvisionedAt: string | null }>(
+      `/mailboxes/${id}/provisioning`,
+    ),
+  provisionDomain: (id: string) =>
+    request<{ status: string }>(`/domains/${id}/provision`, { method: "POST" }),
   listMailboxes: (domainId: string) => request<Mailbox[]>(`/domains/${domainId}/mailboxes`),
   createMailbox: (
     domainId: string,

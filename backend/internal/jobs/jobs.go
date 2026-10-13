@@ -38,10 +38,18 @@ type Job struct {
 var KnownKinds = map[string]bool{
 	"server.dns_rebuild": true,
 	"domain.provision":   true,
+	"domain.remove":      true,
 	"dns.apply":          true,
 	"mailbox.create":     true,
+	"mailbox.password":   true,
+	"mailbox.delete":     true,
 	"alias.provision":    true,
+	"alias.delete":       true,
 }
+
+// Consumer executes a job of a given kind. The returned value is stored as the
+// job result; a non-nil error schedules a retry until max_attempts is reached.
+type Consumer func(ctx context.Context, payload []byte) (any, error)
 
 const jobColumns = `id::text, kind, status, error, attempts, max_attempts, payload, result,
 	COALESCE(to_char(started_at AT TIME ZONE 'UTC','YYYY-MM-DD"T"HH24:MI:SS"Z"'),''),
@@ -50,15 +58,30 @@ const jobColumns = `id::text, kind, status, error, attempts, max_attempts, paylo
 
 // Service persists and executes jobs.
 type Service struct {
-	pool    *pgxpool.Pool
-	logger  *slog.Logger
-	mu      sync.Mutex
-	polling bool
+	pool      *pgxpool.Pool
+	logger    *slog.Logger
+	mu        sync.Mutex
+	polling   bool
+	consumers map[string]Consumer
 }
 
 // NewService returns the job service backed by the given pool.
 func NewService(pool *pgxpool.Pool, logger *slog.Logger) *Service {
-	return &Service{pool: pool, logger: logger}
+	return &Service{pool: pool, logger: logger, consumers: map[string]Consumer{}}
+}
+
+// Register binds a consumer to a job kind. Call before the API starts serving.
+func (s *Service) Register(kind string, fn Consumer) {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	s.consumers[kind] = fn
+}
+
+func (s *Service) consumer(kind string) (Consumer, bool) {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	fn, ok := s.consumers[kind]
+	return fn, ok
 }
 
 // List returns recent jobs.
@@ -89,7 +112,11 @@ func (s *Service) ListPage(ctx context.Context, page, perPage int) ([]*Job, int,
 	return out, total, err
 }
 
-func scanJobs(rows interface{ Next() bool; Scan(...any) error; Err() error }) ([]*Job, error) {
+func scanJobs(rows interface {
+	Next() bool
+	Scan(...any) error
+	Err() error
+}) ([]*Job, error) {
 	var out []*Job
 	for rows.Next() {
 		var j Job
@@ -189,6 +216,23 @@ func (s *Service) worker() {
 	}
 }
 
+// Start resumes durable work after restarts and wakes delayed retries.
+func (s *Service) Start(ctx context.Context) {
+	s.kick()
+	go func() {
+		ticker := time.NewTicker(time.Second)
+		defer ticker.Stop()
+		for {
+			select {
+			case <-ctx.Done():
+				return
+			case <-ticker.C:
+				s.kick()
+			}
+		}
+	}()
+}
+
 func (s *Service) claim() int {
 	ctx, cancel := context.WithTimeout(context.Background(), 30*time.Second)
 	defer cancel()
@@ -198,7 +242,7 @@ func (s *Service) claim() int {
 		WHERE id = (
 			SELECT id FROM jobs
 			WHERE status IN ('queued','retrying') AND run_at <= now() AND attempts < max_attempts
-			ORDER BY created_at LIMIT 1
+			ORDER BY created_at FOR UPDATE SKIP LOCKED LIMIT 1
 		)
 		RETURNING id, kind, payload, attempts, max_attempts`)
 	var id, kind string
@@ -208,29 +252,34 @@ func (s *Service) claim() int {
 		return 0
 	}
 
-	result := s.run(ctx, kind, payload)
-	if result == nil {
+	res, err := s.run(ctx, kind, payload)
+	if err == nil {
+		raw, _ := json.Marshal(map[string]any{"ok": true, "result": res})
 		_, _ = s.pool.Exec(ctx, `
-			UPDATE jobs SET status='succeeded', result='"ok"', finished_at=now()
-			WHERE id=$1`, id)
+			UPDATE jobs SET status='succeeded', result=$2, error='', finished_at=now()
+			WHERE id=$1`, id, raw)
 	} else if attempts >= maxAttempts {
 		_, _ = s.pool.Exec(ctx, `
-			UPDATE jobs SET status='failed', error=$2, finished_at=now() WHERE id=$1`, id, result.Error())
+			UPDATE jobs SET status='failed', error=$2, finished_at=now() WHERE id=$1`, id, err.Error())
 	} else {
 		_, _ = s.pool.Exec(ctx, `
-			UPDATE jobs SET status='retrying', error=$2, run_at = now() + interval '10 seconds' WHERE id=$1`, id, result.Error())
+			UPDATE jobs SET status='retrying', error=$2, run_at = now() + ($3 * interval '1 second') WHERE id=$1`, id, err.Error(), 1<<min(attempts, 8))
 	}
 	return 1
 }
 
-// run executes a job handler. Real provisioning consumers are registered by
-// their domain packages; until one is bound a kind is acknowledged as a no-op.
-func (s *Service) run(ctx context.Context, kind string, payload []byte) error {
+// run executes a job handler. Provisioning consumers are registered at assembly
+// time; a kind without a bound consumer is acknowledged as a no-op so the queue
+// never wedges.
+func (s *Service) run(ctx context.Context, kind string, payload []byte) (any, error) {
 	if !KnownKinds[kind] {
-		return errUnknownKind{kind}
+		return nil, errUnknownKind{kind}
 	}
-	s.logger.Debug("job consumed", slog.String("kind", kind))
-	return nil
+	fn, ok := s.consumer(kind)
+	if !ok {
+		return nil, errors.New("no configured consumer for job kind: " + kind)
+	}
+	return fn(ctx, payload)
 }
 
 type errUnknownKind struct{ kind string }
@@ -250,9 +299,10 @@ type Handler struct {
 	audit *audit.Recorder
 }
 
-// NewHandler builds the job HTTP handler.
-func NewHandler(pool *pgxpool.Pool, logger *slog.Logger, rec *audit.Recorder) *Handler {
-	return &Handler{svc: NewService(pool, logger), audit: rec}
+// NewHandler builds the job HTTP handler around an existing service so that
+// registered consumers share the same instance.
+func NewHandler(svc *Service, rec *audit.Recorder) *Handler {
+	return &Handler{svc: svc, audit: rec}
 }
 
 // RegisterRoutes attaches the jobs API to the router group behind auth.

@@ -23,31 +23,31 @@ func NewService(pool *pgxpool.Pool) *Service {
 
 // Summary is the dashboard payload.
 type Summary struct {
-	Servers  ServerSummary  `json:"servers"`
-	Domains  DomainSummary  `json:"domains"`
-	Mailboxes int          `json:"mailboxes"`
-	Aliases  int           `json:"aliases"`
-	Users    int           `json:"users"`
-	Recent   []RecentEvent `json:"recent"`
+	Servers   ServerSummary `json:"servers"`
+	Domains   DomainSummary `json:"domains"`
+	Mailboxes int           `json:"mailboxes"`
+	Aliases   int           `json:"aliases"`
+	Users     int           `json:"users"`
+	Recent    []RecentEvent `json:"recent"`
 }
 
 // ServerSummary is the server health breakdown.
 type ServerSummary struct {
-	Total     int `json:"total"`
-	Healthy   int `json:"healthy"`
-	Degraded  int `json:"degraded"`
-	Offline   int `json:"offline"`
-	Pending   int `json:"pending"`
+	Total       int `json:"total"`
+	Healthy     int `json:"healthy"`
+	Degraded    int `json:"degraded"`
+	Offline     int `json:"offline"`
+	Pending     int `json:"pending"`
 	Maintenance int `json:"maintenance"`
 }
 
 // DomainSummary is the domain verification breakdown.
 type DomainSummary struct {
-	Total    int `json:"total"`
-	Verified int `json:"verified"`
-	Active   int `json:"active"`
-	Degraded int `json:"degraded"`
-	Pending  int `json:"pending"`
+	Total     int `json:"total"`
+	Verified  int `json:"verified"`
+	Active    int `json:"active"`
+	Degraded  int `json:"degraded"`
+	Pending   int `json:"pending"`
 	Suspended int `json:"suspended"`
 }
 
@@ -74,7 +74,10 @@ func (s *Service) Burndown(ctx context.Context) (*Summary, error) {
 	if sm.Servers.Total, err = count(ctx, s.pool, `SELECT COUNT(*) FROM servers WHERE deleted_at IS NULL`); err != nil {
 		return nil, err
 	}
-	for _, m := range []struct{ col string; dst *int }{
+	for _, m := range []struct {
+		col string
+		dst *int
+	}{
 		{`status = 'healthy'`, &sm.Servers.Healthy},
 		{`status = 'degraded'`, &sm.Servers.Degraded},
 		{`status = 'offline'`, &sm.Servers.Offline},
@@ -90,7 +93,10 @@ func (s *Service) Burndown(ctx context.Context) (*Summary, error) {
 	if sm.Domains.Total, err = count(ctx, s.pool, `SELECT COUNT(*) FROM domains WHERE deleted_at IS NULL`); err != nil {
 		return nil, err
 	}
-	for _, m := range []struct{ col string; dst *int }{
+	for _, m := range []struct {
+		col string
+		dst *int
+	}{
 		{`status = 'verified'`, &sm.Domains.Verified},
 		{`status = 'active'`, &sm.Domains.Active},
 		{`status = 'degraded'`, &sm.Domains.Degraded},

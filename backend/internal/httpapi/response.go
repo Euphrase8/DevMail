@@ -12,19 +12,19 @@ import (
 type ErrorCode string
 
 const (
-	ErrBadRequest      ErrorCode = "bad_request"
-	ErrUnauthorized    ErrorCode = "unauthorized"
-	ErrForbidden       ErrorCode = "forbidden"
-	ErrNotFound        ErrorCode = "not_found"
-	ErrConflict        ErrorCode = "conflict"
-	ErrValidation      ErrorCode = "validation_error"
-	ErrRateLimited     ErrorCode = "rate_limited"
-	ErrTimeout         ErrorCode = "timeout"
-	ErrUpstream        ErrorCode = "upstream_error"
-	ErrInternal        ErrorCode = "internal"
-	ErrNotImplemented  ErrorCode = "not_implemented"
-	ErrNotConfigured   ErrorCode = "not_configured"
-	ErrNetworkBlocked  ErrorCode = "network_blocked"
+	ErrBadRequest     ErrorCode = "bad_request"
+	ErrUnauthorized   ErrorCode = "unauthorized"
+	ErrForbidden      ErrorCode = "forbidden"
+	ErrNotFound       ErrorCode = "not_found"
+	ErrConflict       ErrorCode = "conflict"
+	ErrValidation     ErrorCode = "validation_error"
+	ErrRateLimited    ErrorCode = "rate_limited"
+	ErrTimeout        ErrorCode = "timeout"
+	ErrUpstream       ErrorCode = "upstream_error"
+	ErrInternal       ErrorCode = "internal"
+	ErrNotImplemented ErrorCode = "not_implemented"
+	ErrNotConfigured  ErrorCode = "not_configured"
+	ErrNetworkBlocked ErrorCode = "network_blocked"
 )
 
 type errorBody struct {

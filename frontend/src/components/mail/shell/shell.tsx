@@ -175,9 +175,9 @@ export function MailShell({ children }: { children: ReactNode }) {
                 {n.count && (
                   <span className="font-mono text-[10px] opacity-60">
                     {n.path === "/servers"
-                      ? (data['servers'] ?? []).length
+                      ? (data["servers"] ?? []).length
                       : n.path === "/domains"
-                        ? (data['domains'] ?? []).length
+                        ? (data["domains"] ?? []).length
                         : n.count}
                   </span>
                 )}
@@ -318,7 +318,7 @@ export function MailShell({ children }: { children: ReactNode }) {
           ) : panel === "account" ? (
             <>
               <p className="text-sm">
-                {session ? (session.name || session.email) : "Alex Morgan"}
+                {session ? session.name || session.email : "Alex Morgan"}
                 <span className="text-muted-foreground">
                   · {session ? session.role.replace(/_/g, " ") : "Super Administrator"}
                 </span>

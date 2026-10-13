@@ -20,18 +20,18 @@ import (
 
 // Server is the API representation of a managed mail server.
 type Server struct {
-	ID              string `json:"id"`
-	Name            string `json:"name"`
-	Hostname        string `json:"hostname"`
-	IPv4            string `json:"ipv4"`
-	IPv6            string `json:"ipv6"`
-	Location        string `json:"location"`
-	Environment     string `json:"environment"`
-	Notes           string `json:"notes"`
-	Status          string `json:"status"`
-	Maintenance     bool   `json:"maintenance"`
-	LastCheckAt     string `json:"lastCheckAt"`
-	LastCheckError  string `json:"lastCheckError"`
+	ID             string `json:"id"`
+	Name           string `json:"name"`
+	Hostname       string `json:"hostname"`
+	IPv4           string `json:"ipv4"`
+	IPv6           string `json:"ipv6"`
+	Location       string `json:"location"`
+	Environment    string `json:"environment"`
+	Notes          string `json:"notes"`
+	Status         string `json:"status"`
+	Maintenance    bool   `json:"maintenance"`
+	LastCheckAt    string `json:"lastCheckAt"`
+	LastCheckError string `json:"lastCheckError"`
 }
 
 const selectColumns = `id::text, name, hostname,
@@ -42,8 +42,8 @@ const selectColumns = `id::text, name, hostname,
 
 // Service implements server persistence and health checking.
 type Service struct {
-	pool     *pgxpool.Pool
-	audit    *audit.Recorder
+	pool         *pgxpool.Pool
+	audit        *audit.Recorder
 	allowPrivate bool
 }
 

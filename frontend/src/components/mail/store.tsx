@@ -1,10 +1,4 @@
-import {
-  createContext,
-  useContext,
-  useEffect,
-  useState,
-  type ReactNode,
-} from "react";
+import { createContext, useContext, useEffect, useState, type ReactNode } from "react";
 import { useQuery, useQueryClient } from "@tanstack/react-query";
 import { initialData, type MailRecord } from "@/lib/mail/data";
 import { api } from "@/lib/api";
@@ -161,7 +155,12 @@ export function MailProvider({ children }: { children: ReactNode }) {
   const users = useQuery({ queryKey: ["users"], queryFn: api.listUsers, retry: false });
   const jobs = useQuery({ queryKey: ["jobs"], queryFn: api.listJobs, retry: false });
   const audit = useQuery({ queryKey: ["audit"], queryFn: () => api.listAudit(), retry: false });
-  const dashboard = useQuery({ queryKey: ["dashboard"], queryFn: api.dashboard, retry: false, refetchInterval: 60_000 });
+  const dashboard = useQuery({
+    queryKey: ["dashboard"],
+    queryFn: api.dashboard,
+    retry: false,
+    refetchInterval: 60_000,
+  });
 
   const session = useQuery({
     queryKey: ["session"],

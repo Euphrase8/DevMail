@@ -10,13 +10,14 @@ import (
 	"net/http"
 	"os"
 	"os/signal"
+	"strings"
 	"syscall"
 	"time"
 
 	"github.com/Euphrase8/DevMail/backend/internal/api"
 	"github.com/Euphrase8/DevMail/backend/internal/config"
 	"github.com/Euphrase8/DevMail/backend/internal/db"
-	"github.com/Euphrase8/DevMail/backend/internal/mailboxes"
+	"github.com/Euphrase8/DevMail/backend/internal/engine"
 )
 
 func main() {
@@ -50,8 +51,22 @@ func run(ctx context.Context, cfg config.Config, logger *slog.Logger) error {
 	}
 	logger.Info("migrations applied")
 
-	engine := mailboxes.NoopEngine{}
-	router := api.NewRouter(api.Options{Pool: pool, Config: &cfg, Logger: logger, MailEngine: engine})
+	var mailEngine engine.Engine = engine.Noop{}
+	// A persisted selection is used when MAIL_ENGINE has not explicitly overridden it.
+	if os.Getenv("MAIL_ENGINE") == "" {
+		var selected string
+		if err := pool.QueryRow(ctx, `SELECT value #>> '{}' FROM settings WHERE key='mailEngine'`).Scan(&selected); err == nil {
+			cfg.MailEngine = selected
+		}
+	}
+	switch strings.ToLower(cfg.MailEngine) {
+	case "sql":
+		mailEngine = engine.NewSQL(pool)
+		logger.Info("mail engine configured", slog.String("engine", mailEngine.Name()))
+	default:
+		logger.Info("mail engine disabled; records will be unmanaged", slog.String("engine", mailEngine.Name()))
+	}
+	router := api.NewRouter(api.Options{Context: ctx, Pool: pool, Config: &cfg, Logger: logger, MailEngine: mailEngine})
 
 	srv := &http.Server{
 		Addr:              cfg.HTTPAddr,

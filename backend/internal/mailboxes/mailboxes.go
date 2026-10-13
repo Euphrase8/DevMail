@@ -7,13 +7,13 @@ package mailboxes
 import (
 	"context"
 	"errors"
-	"fmt"
 	"net/http"
 	"strings"
 	"time"
 
 	"github.com/Euphrase8/DevMail/backend/internal/audit"
 	"github.com/Euphrase8/DevMail/backend/internal/auth"
+	"github.com/Euphrase8/DevMail/backend/internal/engine"
 	"github.com/Euphrase8/DevMail/backend/internal/httpapi"
 	"github.com/gin-gonic/gin"
 	"github.com/jackc/pgx/v5/pgxpool"
@@ -48,52 +48,69 @@ const mailboxColsPlain = `id::text, domain_id::text, local,
 	COALESCE(to_char(password_set_at AT TIME ZONE 'UTC','YYYY-MM-DD"T"HH24:MI:SS"Z"'),''),
 	to_char(created_at AT TIME ZONE 'UTC','YYYY-MM-DD"T"HH24:MI:SS"Z"')`
 
-// Engine is the pluggable boundary for creating/deleting mailboxes on a real
-// mail engine. Implementations may be added later (Dovecot/Pigeonhole,
-// Postfix virtual, remote provider) without touching handlers.
-type Engine interface {
-	// Configured reports whether a live engine is available.
-	Configured() bool
-	// Name identifies the engine for status reporting.
-	Name() string
-	// Create provisions a mailbox on the engine.
-	Create(ctx context.Context, domain, local, password string) error
-	// Delete removes a mailbox on the engine.
-	Delete(ctx context.Context, domain, local string) error
-	// SetPassword rotates a mailbox password on the engine.
-	SetPassword(ctx context.Context, domain, local, password string) error
-}
+// Enqueuer schedules an asynchronous provisioning job. Wiring passes a closure
+// over the jobs service so this package stays free of a jobs dependency.
+type Enqueuer func(ctx context.Context, kind string, payload map[string]string) error
 
-// NoopEngine is the default adapter used until a real engine is configured.
-type NoopEngine struct{}
-
-func (NoopEngine) Configured() bool  { return false }
-func (NoopEngine) Name() string      { return "none" }
-func (NoopEngine) Create(context.Context, string, string, string) error { return nil }
-func (NoopEngine) Delete(context.Context, string, string) error         { return nil }
-func (NoopEngine) SetPassword(context.Context, string, string, string) error { return nil }
-
-// ErrEngineRequired is returned when a provisioning action needs a real engine.
-var ErrEngineRequired = errors.New("no mail engine is configured; the record was created without live provisioning")
-
-// Service implements mailbox and alias persistence.
+// Service implements mailbox and alias persistence and enqueues provisioning.
 type Service struct {
-	pool   *pgxpool.Pool
-	audit  *audit.Recorder
-	engine Engine
+	pool    *pgxpool.Pool
+	audit   *audit.Recorder
+	engine  engine.Engine
+	enqueue Enqueuer
 }
 
 // NewService creates the mailbox service with the given engine adapter.
-func NewService(pool *pgxpool.Pool, rec *audit.Recorder, engine Engine) *Service {
-	if engine == nil {
-		engine = NoopEngine{}
+func NewService(pool *pgxpool.Pool, rec *audit.Recorder, eng engine.Engine, enqueue Enqueuer) *Service {
+	if eng == nil {
+		eng = engine.Noop{}
 	}
-	return &Service{pool: pool, audit: rec, engine: engine}
+	return &Service{pool: pool, audit: rec, engine: eng, enqueue: enqueue}
 }
 
 // EngineStatus returns the current engine configuration.
 func (s *Service) EngineStatus() map[string]any {
 	return map[string]any{"configured": s.engine.Configured(), "name": s.engine.Name()}
+}
+
+// enqueueProvision schedules a job when a live engine is configured.
+func (s *Service) enqueueProvision(ctx context.Context, kind, idName, id string) {
+	if !s.engine.Configured() || s.enqueue == nil {
+		return
+	}
+	_ = s.enqueue(ctx, kind, map[string]string{idName: id})
+}
+
+// ProvisionTarget resolves the data a mailbox provisioning consumer needs.
+func (s *Service) ProvisionTarget(ctx context.Context, id string) (local, domain, passwordHash string, quotaBytes int64, err error) {
+	// Soft-deleted mailboxes are included so the teardown consumer can resolve
+	// the engine key after the record is removed.
+	err = s.pool.QueryRow(ctx, `
+		SELECT mb.local, d.name, mb.password_hash, mb.quota_bytes
+		FROM mailboxes mb JOIN domains d ON d.id = mb.domain_id
+		WHERE mb.id=$1`, id).Scan(&local, &domain, &passwordHash, &quotaBytes)
+	return
+}
+
+// MarkProvisioned records the outcome of a mailbox provisioning attempt.
+func (s *Service) MarkProvisioned(ctx context.Context, id, status, errMsg string) error {
+	_, err := s.pool.Exec(ctx, `
+		UPDATE mailboxes SET engine_status=$2, provisioning_error=$3, last_provisioned_at=now(), updated_at=now()
+		WHERE id=$1`, id, status, errMsg)
+	return err
+}
+
+// AliasTarget resolves the data an alias provisioning consumer needs.
+func (s *Service) AliasTarget(ctx context.Context, id string) (source, destination string, err error) {
+	err = s.pool.QueryRow(ctx, `
+		SELECT al.source || '@' || d.name, al.destination FROM aliases al JOIN domains d ON d.id=al.domain_id WHERE al.id=$1 AND al.deleted_at IS NULL`, id).Scan(&source, &destination)
+	return
+}
+
+// MarkAliasProvisioned records a successful alias provisioning attempt.
+func (s *Service) MarkAliasProvisioned(ctx context.Context, id string) error {
+	_, err := s.pool.Exec(ctx, `UPDATE aliases SET last_provisioned_at=now() WHERE id=$1`, id)
+	return err
 }
 
 type rowScanner interface{ Scan(...any) error }
@@ -110,7 +127,7 @@ func scanMailbox(row rowScanner) (*Mailbox, error) {
 // ListByDomain returns mailboxes for a domain.
 func (s *Service) ListByDomain(ctx context.Context, domainID string) ([]*Mailbox, error) {
 	rows, err := s.pool.Query(ctx, `
-		SELECT `+mailboxColsJoined+` FROM mailboxes mb
+		SELECT `+mailboxColsJoined+` FROM mailboxes mb JOIN domains d ON d.id=mb.domain_id
 		WHERE mb.domain_id = $1 AND mb.deleted_at IS NULL
 		ORDER BY mb.local`, domainID)
 	if err != nil {
@@ -137,8 +154,8 @@ func (s *Service) EmailByID(ctx context.Context, id string) (address, domain str
 	return
 }
 
-// Create maintains the database record and, when a live engine is present,
-// provisions the mailbox on it.
+// Create maintains the database record (hashing the password once) and enqueues
+// provisioning when a live engine is configured. Plaintext never leaves memory.
 func (s *Service) Create(ctx context.Context, domainID, local, displayName string, quotaBytes int64, password string) (*Mailbox, error) {
 	// Resolve the domain first so a missing domain is a clean 404.
 	var domainName string
@@ -147,42 +164,43 @@ func (s *Service) Create(ctx context.Context, domainID, local, displayName strin
 	if err != nil {
 		return nil, errNotFound
 	}
+	passwordHash := ""
+	if password != "" {
+		if passwordHash, err = auth.HashPassword(ctx, password); err != nil {
+			return nil, err
+		}
+	}
 	row := s.pool.QueryRow(ctx, `
-		INSERT INTO mailboxes (domain_id, local, display_name, quota_bytes, status, engine_status, password_set_at)
-		VALUES ($1,$2,$3,$4,'active', $5, CASE WHEN $6 <> '' THEN now() ELSE NULL END)
+		INSERT INTO mailboxes (domain_id, local, display_name, quota_bytes, status, engine_status, password_set_at, password_hash)
+		VALUES ($1,$2,$3,$4,'active', $5, CASE WHEN $6 <> '' THEN now() ELSE NULL END, $7)
 		RETURNING `+mailboxColsPlain,
-		domainID, local, displayName, quotaBytes, engineStatusLabel(s.engine), password)
+		domainID, local, displayName, quotaBytes, engineStatusLabel(s.engine), password, passwordHash)
 	mb, err := scanMailbox(row)
 	if err != nil {
 		return nil, err
 	}
-	if password != "" && s.engine.Configured() {
-		if perr := s.engine.Create(ctx, domainName, local, password); perr != nil {
-			return mb, fmt.Errorf("%w: %v", ErrEngineRequired, perr)
-		}
-	}
+	// Durable outbox trigger queues provisioning atomically.
 	return mb, nil
 }
 
-// Update changes display name, quota, and optionally resets the password.
+// Update changes display name, quota, and optionally resets the password. A new
+// password is hashed once and provisioning is enqueued when an engine is live.
 func (s *Service) Update(ctx context.Context, id, displayName string, quotaBytes int64, password string) (*Mailbox, error) {
 	if password != "" {
+		passwordHash, err := auth.HashPassword(ctx, password)
+		if err != nil {
+			return nil, err
+		}
 		row := s.pool.QueryRow(ctx, `
 			UPDATE mailboxes SET display_name=$2, quota_bytes=$3,
-				password_set_at = CASE WHEN $4 <> '' THEN now() ELSE password_set_at END,
-				updated_at=now()
+				password_hash=$4, password_set_at=now(), updated_at=now()
 			WHERE id=$1 AND deleted_at IS NULL
-			RETURNING `+mailboxColsPlain, id, displayName, quotaBytes, password)
+			RETURNING `+mailboxColsPlain, id, displayName, quotaBytes, passwordHash)
 		mb, err := scanMailbox(row)
 		if err != nil {
 			return nil, errNotFound
 		}
-		if s.engine.Configured() {
-			_, domain, _ := s.EmailByID(ctx, id)
-			if perr := s.engine.SetPassword(ctx, domain, mb.Local, password); perr != nil {
-				return mb, fmt.Errorf("password update failed on engine: %v", perr)
-			}
-		}
+		// Durable outbox trigger queues provisioning atomically.
 		return mb, nil
 	}
 	row := s.pool.QueryRow(ctx, `
@@ -192,30 +210,20 @@ func (s *Service) Update(ctx context.Context, id, displayName string, quotaBytes
 	return scanMailbox(row)
 }
 
-// Delete removes a mailbox (soft delete) and, when possible, on the engine.
+// Delete soft-deletes a mailbox and enqueues removal on the engine.
 func (s *Service) Delete(ctx context.Context, id string) error {
-	mb, err := scanMailbox(s.pool.QueryRow(ctx, `
-		SELECT `+mailboxColsPlain+` FROM mailboxes mb WHERE mb.id=$1 AND mb.deleted_at IS NULL`, id))
-	if err != nil {
-		return errNotFound
-	}
-	_, domain, _ := s.EmailByID(ctx, id)
 	tag, err := s.pool.Exec(ctx,
-		`UPDATE mailboxes SET deleted_at=now(), status='suspended' WHERE id=$1`, id)
+		`UPDATE mailboxes SET deleted_at=now(), status='suspended', updated_at=now() WHERE id=$1 AND deleted_at IS NULL`, id)
 	if err != nil || tag.RowsAffected() == 0 {
 		return errNotFound
 	}
-	if s.engine.Configured() {
-		if perr := s.engine.Delete(ctx, domain, mb.Local); perr != nil {
-			return fmt.Errorf("engine delete failed: %v", perr)
-		}
-	}
+	// Durable outbox trigger queues teardown atomically.
 	return nil
 }
 
-func engineStatusLabel(e Engine) string {
+func engineStatusLabel(e engine.Engine) string {
 	if e.Configured() {
-		return "managed"
+		return "provisioning"
 	}
 	return "unmanaged"
 }
@@ -262,24 +270,32 @@ func (s *Service) ListAliases(ctx context.Context, domainID string) ([]*Alias, e
 	return out, rows.Err()
 }
 
-// CreateAlias inserts an alias for a domain.
+// CreateAlias inserts an alias for a domain and enqueues provisioning.
 func (s *Service) CreateAlias(ctx context.Context, domainID, source, destination string, forwarding bool) (*Alias, error) {
 	row := s.pool.QueryRow(ctx, `
-		INSERT INTO aliases (domain_id, source, destination, forwarding, enabled)
+		INSERT INTO aliases AS al (domain_id, source, destination, forwarding, enabled)
 		VALUES ($1,$2,$3,$4,true)
 		RETURNING `+aliasColumns, domainID, strings.ToLower(source), destination, forwarding)
-	return scanAlias(row)
+	a, err := scanAlias(row)
+	if err != nil {
+		return nil, err
+	}
+	// Durable outbox trigger queues provisioning atomically.
+	return a, nil
 }
 
-// DeleteAlias removes an alias.
+// DeleteAlias removes an alias and enqueues teardown on the engine.
 func (s *Service) DeleteAlias(ctx context.Context, id string) error {
-	tag, err := s.pool.Exec(ctx, `UPDATE aliases SET deleted_at=now() WHERE id=$1`, id)
-	if err != nil {
-		return err
-	}
-	if tag.RowsAffected() == 0 {
+	var source string
+	if err := s.pool.QueryRow(ctx,
+		`SELECT source FROM aliases WHERE id=$1 AND deleted_at IS NULL`, id).Scan(&source); err != nil {
 		return errNotFound
 	}
+	tag, err := s.pool.Exec(ctx, `UPDATE aliases SET deleted_at=now() WHERE id=$1 AND deleted_at IS NULL`, id)
+	if err != nil || tag.RowsAffected() == 0 {
+		return errNotFound
+	}
+	// Durable outbox trigger queues teardown atomically.
 	return nil
 }
 
@@ -291,9 +307,12 @@ type Handler struct {
 }
 
 // NewHandler builds the mailbox HTTP handler.
-func NewHandler(pool *pgxpool.Pool, rec *audit.Recorder, engine Engine) *Handler {
-	return &Handler{svc: NewService(pool, rec, engine)}
+func NewHandler(pool *pgxpool.Pool, rec *audit.Recorder, eng engine.Engine, enqueue Enqueuer) *Handler {
+	return &Handler{svc: NewService(pool, rec, eng, enqueue)}
 }
+
+// Service exposes the underlying service for provisioning consumers.
+func (h *Handler) Service() *Service { return h.svc }
 
 func (h *Handler) validateLocal(local string) map[string]any {
 	local = strings.ToLower(strings.TrimSpace(local))
@@ -333,6 +352,7 @@ func (h *Handler) RegisterRoutes(r *gin.RouterGroup, auth gin.HandlerFunc) {
 	mailboxes.GET("/aliases", h.ListAliases)
 	mailboxes.POST("/aliases", h.CreateAlias)
 	r.PATCH("/mailboxes/:mailbox_id", auth, h.Update)
+	r.GET("/mailboxes/:mailbox_id/provisioning", auth, h.Provisioning)
 	r.DELETE("/mailboxes/:mailbox_id", auth, h.Delete)
 	r.DELETE("/aliases/:alias_id", auth, h.DeleteAlias)
 }

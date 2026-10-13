@@ -368,5 +368,3 @@ func (h *Handler) Verify(c *gin.Context) {
 	h.audit.Record(ctx, auth.CurrentUser(c), "provider.verify", "provider", p.ID, gin.H{"status": p.Status}, c.ClientIP())
 	httpapi.Respond(c, http.StatusOK, p)
 }
-
-

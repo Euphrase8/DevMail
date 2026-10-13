@@ -7,7 +7,25 @@ import { routeTree } from "@/routeTree.gen";
 // Match routes without running loaders or rendering: loaders may need a server or
 // network the test run lacks, and jsdom never loads the stylesheets React waits on.
 describe("App routing", () => {
-  it.each(["/servers", "/domains", "/dns", "/providers", "/mailboxes", "/aliases", "/routing", "/monitoring", "/notifications", "/jobs", "/audit", "/users", "/settings", "/docs", "/backups", "/webmail", "/login"])("matches %s", (path) => {
+  it.each([
+    "/servers",
+    "/domains",
+    "/dns",
+    "/providers",
+    "/mailboxes",
+    "/aliases",
+    "/routing",
+    "/monitoring",
+    "/notifications",
+    "/jobs",
+    "/audit",
+    "/users",
+    "/settings",
+    "/docs",
+    "/backups",
+    "/webmail",
+    "/login",
+  ])("matches %s", (path) => {
     const router = createRouter({ routeTree, context: { queryClient: new QueryClient() } });
     expect(router.matchRoutes(path).at(-1)?.routeId).toBe(path);
   });

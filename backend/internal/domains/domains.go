@@ -22,17 +22,17 @@ import (
 
 // Domain is the API representation of a mail domain under management.
 type Domain struct {
-	ID                string   `json:"id"`
-	Name              string   `json:"name"`
-	ServerID          string   `json:"serverId"`
-	Status            string   `json:"status"`
-	VerificationToken string   `json:"verificationToken"`
-	VerificationName  string   `json:"verificationName"`
-	VerifiedAt        string   `json:"verifiedAt"`
-	CatchAll          bool     `json:"catchAll"`
-	QuotaBytes        int64    `json:"quotaBytes"`
-	CreatedAt         string   `json:"createdAt"`
-	CheckResults      []Check  `json:"checkResults,omitempty"`
+	ID                string  `json:"id"`
+	Name              string  `json:"name"`
+	ServerID          string  `json:"serverId"`
+	Status            string  `json:"status"`
+	VerificationToken string  `json:"verificationToken"`
+	VerificationName  string  `json:"verificationName"`
+	VerifiedAt        string  `json:"verifiedAt"`
+	CatchAll          bool    `json:"catchAll"`
+	QuotaBytes        int64   `json:"quotaBytes"`
+	CreatedAt         string  `json:"createdAt"`
+	CheckResults      []Check `json:"checkResults,omitempty"`
 }
 
 // Check is one DNS validation result for a domain.
@@ -52,15 +52,25 @@ const domainColumns = `id::text, name,
 	catch_all, quota_bytes,
 	to_char(created_at AT TIME ZONE 'UTC','YYYY-MM-DD"T"HH24:MI:SS"Z"')`
 
+// Enqueuer schedules an asynchronous provisioning job.
+type Enqueuer func(ctx context.Context, kind string, payload map[string]string) error
+
 // Service implements domain persistence and DNS validation.
 type Service struct {
-	pool  *pgxpool.Pool
-	audit *audit.Recorder
+	pool    *pgxpool.Pool
+	audit   *audit.Recorder
+	enqueue Enqueuer
 }
 
 // NewService creates the domain service.
-func NewService(pool *pgxpool.Pool, auditRec *audit.Recorder) *Service {
-	return &Service{pool: pool, audit: auditRec}
+func NewService(pool *pgxpool.Pool, auditRec *audit.Recorder, enqueue Enqueuer) *Service {
+	return &Service{pool: pool, audit: auditRec, enqueue: enqueue}
+}
+
+func (s *Service) enqueueProvision(ctx context.Context, kind, id string) {
+	if s.enqueue != nil {
+		_ = s.enqueue(ctx, kind, map[string]string{"domainId": id})
+	}
 }
 
 type rowScanner interface{ Scan(...any) error }
@@ -99,6 +109,22 @@ func (s *Service) List(ctx context.Context) ([]*Domain, error) {
 func (s *Service) Get(ctx context.Context, id string) (*Domain, error) {
 	row := s.pool.QueryRow(ctx, `SELECT `+domainColumns+` FROM domains WHERE id=$1 AND deleted_at IS NULL`, id)
 	return scanDomain(row)
+}
+
+// Name resolves a domain name by id, including soft-deleted rows, for the
+// teardown path.
+func (s *Service) Name(ctx context.Context, id string) (string, error) {
+	var name string
+	err := s.pool.QueryRow(ctx, `SELECT name FROM domains WHERE id=$1`, id).Scan(&name)
+	return name, err
+}
+
+// MarkProvisioned records the outcome of a domain provisioning attempt.
+func (s *Service) MarkProvisioned(ctx context.Context, id, errMsg string) error {
+	_, err := s.pool.Exec(ctx, `
+		UPDATE domains SET last_provisioned_at=now(), provisioning_error=$2, updated_at=now()
+		WHERE id=$1`, id, errMsg)
+	return err
 }
 
 // Create inserts a new domain, assigning it a unique TXT verification token.
@@ -150,6 +176,7 @@ func (s *Service) Delete(ctx context.Context, id string) error {
 	if tag.RowsAffected() == 0 {
 		return errNotFound
 	}
+	s.enqueueProvision(ctx, "domain.remove", id)
 	return nil
 }
 
@@ -183,7 +210,7 @@ func (s *Service) Validate(ctx context.Context, id string) (*Domain, error) {
 	}
 	results = append(results, Check{
 		Kind: "ownership", OK: ownerFound,
-		Detail: detailOf(ownerFound, "Ownership TXT token published", "Token missing or mismatch"),
+		Detail:    detailOf(ownerFound, "Ownership TXT token published", "Token missing or mismatch"),
 		CheckedAt: nowUTC(),
 	})
 
@@ -207,7 +234,7 @@ func (s *Service) Validate(ctx context.Context, id string) (*Domain, error) {
 		}
 	}
 	results = append(results, Check{Kind: "spf", OK: spfFound,
-		Detail: detailOf(spfFound, "SPF record present", "No SPF record found"),
+		Detail:    detailOf(spfFound, "SPF record present", "No SPF record found"),
 		CheckedAt: nowUTC()})
 
 	dmarcFound := false
@@ -220,7 +247,7 @@ func (s *Service) Validate(ctx context.Context, id string) (*Domain, error) {
 		}
 	}
 	results = append(results, Check{Kind: "dmarc", OK: dmarcFound,
-		Detail: detailOf(dmarcFound, "DMARC record present", "No DMARC record found"),
+		Detail:    detailOf(dmarcFound, "DMARC record present", "No DMARC record found"),
 		CheckedAt: nowUTC()})
 
 	dkimFound := false
@@ -233,7 +260,7 @@ func (s *Service) Validate(ctx context.Context, id string) (*Domain, error) {
 		}
 	}
 	results = append(results, Check{Kind: "dkim", OK: dkimFound,
-		Detail: detailOf(dkimFound, "DKIM selector 'default' present", "No DKIM record for selector 'default'"),
+		Detail:    detailOf(dkimFound, "DKIM selector 'default' present", "No DKIM record for selector 'default'"),
 		CheckedAt: nowUTC()})
 
 	allOK := true
@@ -321,7 +348,12 @@ func (s *Service) Verify(ctx context.Context, id string) (*Domain, error) {
 	_, _ = s.pool.Exec(ctx,
 		`UPDATE domains SET status='verified', verified_at=now(), updated_at=now() WHERE id=$1`, id)
 	row := s.pool.QueryRow(ctx, `SELECT `+domainColumns+` FROM domains WHERE id=$1`, id)
-	return scanDomain(row)
+	d, err = scanDomain(row)
+	if err != nil {
+		return nil, err
+	}
+	s.enqueueProvision(ctx, "domain.provision", id)
+	return d, nil
 }
 
 func detailOf(ok bool, yes, no string) string {
@@ -343,9 +375,12 @@ type Handler struct {
 }
 
 // NewHandler builds the domain HTTP handler.
-func NewHandler(pool *pgxpool.Pool, auditRec *audit.Recorder) *Handler {
-	return &Handler{svc: NewService(pool, auditRec)}
+func NewHandler(pool *pgxpool.Pool, auditRec *audit.Recorder, enqueue Enqueuer) *Handler {
+	return &Handler{svc: NewService(pool, auditRec, enqueue)}
 }
+
+// Service exposes the underlying service for provisioning consumers.
+func (h *Handler) Service() *Service { return h.svc }
 
 type domainRequest struct {
 	Name       string `json:"name"`
@@ -387,6 +422,7 @@ func (h *Handler) RegisterRoutes(r *gin.RouterGroup, auth gin.HandlerFunc) {
 	domains.POST("", h.Create)
 	domains.POST("/:id/verify", h.Verify)
 	domains.POST("/:id/validate", h.Validate)
+	domains.POST("/:id/provision", h.Provision)
 	domains.GET("/:id/checks", h.Checks)
 	domains.PATCH("/:id", h.Update)
 	domains.DELETE("/:id", h.Delete)
@@ -445,7 +481,7 @@ func (h *Handler) Verify(c *gin.Context) {
 			httpapi.Fail(c, http.StatusNotFound, httpapi.ErrNotFound, "Domain not found.")
 			return
 		}
-		httpapi.Fail(c, http.StatusConflict, httpapi.ErrConflict, "Verification failed. " + err.Error())
+		httpapi.Fail(c, http.StatusConflict, httpapi.ErrConflict, "Verification failed. "+err.Error())
 		return
 	}
 	h.svc.audit.Record(ctx, auth.CurrentUser(c), "domain.verify", "domain", d.ID, nil, c.ClientIP())

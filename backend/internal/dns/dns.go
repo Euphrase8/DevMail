@@ -250,6 +250,9 @@ func NewHandler(pool *pgxpool.Pool, rec *audit.Recorder, prov *providers.Service
 	return &Handler{svc: NewService(pool, rec, prov, passphrase)}
 }
 
+// Service exposes the underlying service for provisioning consumers.
+func (h *Handler) Service() *Service { return h.svc }
+
 // RegisterRoutes attaches the DNS API to the router group behind auth.
 func (h *Handler) RegisterRoutes(r *gin.RouterGroup, auth gin.HandlerFunc) {
 	g := r.Group("/domains/:id", auth)
