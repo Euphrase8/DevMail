@@ -63,7 +63,7 @@ listener is `:7000`; dev DB is PostgreSQL (`postgres`/`1508`, database `devmail`
 | GET  | `/api/v1/jobs` | list (paged) |
 | POST | `/api/v1/jobs` | enqueue `{kind, payload}` |
 | POST | `/api/v1/jobs/:id/retry` | re-run a failed job |
-| POST | `/api/v1/jobs/:id/cancel` | cancel a pending job |
+| POST | `/api/v1/jobs/:id/cancel` | cancel a 4ebb81c job |
 | GET  | `/api/v1/servers/:id/health` | `?limit=` health history |
 | GET  | `/api/v1/domains/:id/checks` | `?kind=&limit=` check history |
 | GET  | `/api/v1/providers` | list DNS providers |
@@ -270,8 +270,8 @@ works; login events appear in `/audit`.
 | Phase | Title | Status | Commit |
 |---|---|---|---|
 | 0–8 | Foundation → frontend wiring (baseline) | `[x]` | `9175d67` |
-| 9 | Surface collected telemetry | `[x]` | `pending` |
-| 10 | DNS records + providers | `[x]` | `pending` |
+| 9 | Surface collected telemetry | `[x]` | `4ebb81c` |
+| 10 | DNS records + providers | `[x]` | `4ebb81c` |
 | 11 | Real mail engine + provisioning | `[ ]` | — |
 | 12 | Routing / backups / notifications | `[ ]` | — |
 | 13 | Auth & session hardening | `[ ]` | — |
@@ -288,6 +288,6 @@ works; login events appear in `/audit`.
 | Date | Phase | Change | Evidence | Commit |
 |---|---|---|---|---|
 | 2026-10-13 | 0–8 | Baseline backend + frontend wiring complete; port moved to `:7000` | `git push 2302558..9175d67`; `go test ./...` pass; live `/health` `db:ok` | `9175d67` |
-| 2026-10-13 | 9 | Telemetry surfaced: server health history, domain check history, jobs enqueue/retry/cancel + mutex worker | `go vet ./...` + `go test ./...` pass (dns 2.75s, providers 2.73s, secretbox 1.00s); live e2e on `:8095` green | `pending` |
-| 2026-10-13 | 10 | DNS records + provider adapters: secretbox, migration `0002_dns`, `internal/providers` (manual + Cloudflare), `internal/dns` + DKIM | live e2e: plan 6→7 records, DKIM pubLen 392, manual apply, jobs `succeeded` | `pending` |
-| 2026-10-13 | 9/10 | Frontend wiring: api.ts methods, `dns-page`, `providers-page`, `jobs-page`, `server-health-panel`, route wiring | `npx tsc --noEmit` clean; `npm test` 18/18; `npm run build` ok; `eslint --fix` clean | `pending` |
+| 2026-10-13 | 9 | Telemetry surfaced: server health history, domain check history, jobs enqueue/retry/cancel + mutex worker | `go vet ./...` + `go test ./...` pass (dns 2.75s, providers 2.73s, secretbox 1.00s); live e2e on `:8095` green | `4ebb81c` |
+| 2026-10-13 | 10 | DNS records + provider adapters: secretbox, migration `0002_dns`, `internal/providers` (manual + Cloudflare), `internal/dns` + DKIM | live e2e: plan 6→7 records, DKIM pubLen 392, manual apply, jobs `succeeded` | `4ebb81c` |
+| 2026-10-13 | 9/10 | Frontend wiring: api.ts methods, `dns-page`, `providers-page`, `jobs-page`, `server-health-panel`, route wiring | `npx tsc --noEmit` clean; `npm test` 18/18; `npm run build` ok; `eslint --fix` clean | `4ebb81c` |
