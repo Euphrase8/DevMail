@@ -25,7 +25,12 @@ export default defineConfig(async ({ command }) => {
   // Nitro is only needed to produce a deployable build output.
   if (command === "build") {
     const { nitro } = await import("nitro/vite");
-    plugins.push(nitro({ defaultPreset: "cloudflare-module" }));
+    plugins.push(
+      nitro({
+        defaultPreset:
+          process.env["NITRO_PRESET"] === "node-server" ? "node-server" : "cloudflare-module",
+      }),
+    );
   }
 
   return {

@@ -24,4 +24,6 @@ The dev server starts on http://localhost:8080.
 
 ## Notes
 
-This delivery is frontend-only. All resources, statuses and metrics are illustrative fixtures held in memory for the current browser session. No mail server, DNS provider, database, authentication service or provisioning worker is connected. See `FRONTEND_HANDOFF.md` for scope and integration boundaries.
+The frontend is part of the DevMail application and communicates with the Go API
+under `/api/v1`. Set `VITE_API_URL` when the API is hosted separately; during
+development the Vite proxy forwards `/api` to `http://localhost:7000`.

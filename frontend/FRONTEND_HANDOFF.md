@@ -1,26 +1,14 @@
 # DevMail frontend handoff
 
-## Scope
-This is a frontend-only delivery. All initial resources and operational metrics are illustrative fixtures. The header and resource footers identify the demo environment. No mail server, DNS provider, database, authentication service, or provisioning worker is connected.
+The frontend is a connected TanStack Start application. It uses the typed client
+in `src/lib/api.ts` to call the Go service under `/api/v1`, carrying the
+cookie-authenticated session and signed CSRF token for mutations.
 
-## Screens
-The overview is at `/`. Dedicated routes cover servers, domains, DNS records, mailboxes, aliases, routing, webmail, monitoring, provisioning jobs, backups, audit log, users, settings, and sign-in/admin-bootstrap/MFA previews.
+Every product route reads or writes live API resources. When the API cannot be
+reached, the interface reports that state instead of showing placeholder
+resources or operational metrics. Mail delivery, DNS credentials and backup
+destinations remain deployment configuration external to the browser.
 
-## Interactive behavior
-Resource pages include search, status filtering, CSV export, detail inspection, copying fields, add/edit forms, duplicate detection, validation, and confirmed sample removal. Server registration validates hostname and IPv4. Mailboxes validate password length and quota; generated passwords are not retained in fixtures. Sample settings and resources last only for the current browser session and reset on reload. No browser storage is used.
-
-## Integration boundaries
-- Replace `MailProvider` sample data and mutations with authenticated TanStack Query/API operations.
-- Implement backend authorization independently of frontend controls. Apply role and resource scope on every protected operation.
-- Implement domain ownership challenge issuance and verification server-side. DNS readiness, mail-engine provisioning and external delivery verification are distinct lifecycle stages.
-- Connect server enrollment with restricted credentials, preflight checks, explicit privileged approval and auditable jobs. Do not accept private keys in the frontend.
-- Replace the sample charts and health indicators with real timestamped monitoring data. Add polling or subscriptions only after services exist.
-- Wire job retry, backup restore, password reset, user invitations, MFA, session revocation and alert acknowledgement to secured endpoints. Current controls explicitly report that no live action occurred.
-- Use secret storage for mail-engine and DNS-provider credentials; disabled credential inputs intentionally avoid exposing or retaining secrets.
-- The sign-in page does not authenticate or create sessions. Webmail opens only a user-configured HTTPS endpoint and does not provide automatic mailbox access.
-
-## Design
-Semantic OKLCH tokens, typography, motion, responsive layout rules, lines and visualization styling live in `src/styles.css`. Components use existing Button and Radix Dialog controls. Reduced motion is respected. No decorative cards or uploaded reference screenshots are used.
-
-## Validation
-Routing tests cover every leaf. Browser checks should include search, add/edit/remove, invalid server input, mailbox creation, filters, settings changes, mobile navigation and reduced-motion rendering. Actual infrastructure and authenticated workflows cannot be verified until backend integration exists.
+Run `npm test`, `npm run lint`, `npx tsc --noEmit` and `npm run build`
+before shipping frontend changes. Run the backend suite and live verification
+script with PostgreSQL for end-to-end validation.

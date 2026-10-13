@@ -6,13 +6,7 @@ import { api, type Job } from "@/lib/api";
 import { useMail } from "../store";
 import { Status } from "../shared/visualizations";
 
-const KINDS = [
-  "domain.provision",
-  "dns.apply",
-  "mailbox.create",
-  "alias.provision",
-  "server.dns_rebuild",
-];
+const KINDS = ["domain.provision", "dns.apply", "mailbox.create", "alias.provision"];
 
 function statusLabel(status: string): string {
   switch (status) {
@@ -35,6 +29,26 @@ export function JobsPage() {
   const [kind, setKind] = useState(KINDS[0]!);
   const [busy, setBusy] = useState(false);
   const online = backend === "online";
+  const [domainId, setDomainId] = useState("");
+  const [targetId, setTargetId] = useState("");
+  const [providerId, setProviderId] = useState("");
+  const domains = useQuery({ queryKey: ["domains"], queryFn: api.listDomains, enabled: online });
+  const providers = useQuery({
+    queryKey: ["providers"],
+    queryFn: api.listProviders,
+    enabled: online,
+  });
+  const activeDomain = domainId || domains.data?.[0]?.id || "";
+  const mailboxes = useQuery({
+    queryKey: ["mailboxes", activeDomain],
+    queryFn: () => api.listMailboxes(activeDomain),
+    enabled: !!activeDomain && kind === "mailbox.create",
+  });
+  const aliases = useQuery({
+    queryKey: ["aliases", activeDomain],
+    queryFn: () => api.listAliases(activeDomain),
+    enabled: !!activeDomain && kind === "alias.provision",
+  });
 
   const jobs = useQuery({
     queryKey: ["jobs"],
@@ -49,7 +63,15 @@ export function JobsPage() {
   const enqueue = async () => {
     setBusy(true);
     try {
-      await api.enqueueJob({ kind, payload: { requestedBy: "console" } });
+      const payload =
+        kind === "dns.apply"
+          ? { domainId: activeDomain, providerId: providerId || providers.data?.[0]?.id || "" }
+          : kind === "mailbox.create"
+            ? { mailboxId: targetId || mailboxes.data?.[0]?.id || "" }
+            : kind === "alias.provision"
+              ? { aliasId: targetId || aliases.data?.[0]?.id || "" }
+              : { domainId: activeDomain };
+      await api.enqueueJob({ kind, payload });
       notify(`Queued a ${kind} job.`);
       refresh();
     } catch (err) {
@@ -116,7 +138,10 @@ export function JobsPage() {
             aria-label="Job kind"
             className="h-8 rounded border border-border bg-transparent px-2 text-xs"
             value={kind}
-            onChange={(e) => setKind(e.target.value)}
+            onChange={(e) => {
+              setKind(e.target.value);
+              setTargetId("");
+            }}
           >
             {KINDS.map((k) => (
               <option key={k} value={k}>
@@ -124,7 +149,60 @@ export function JobsPage() {
               </option>
             ))}
           </select>
-          <Button size="sm" disabled={busy} onClick={enqueue}>
+          <select
+            aria-label="Job domain"
+            value={activeDomain}
+            onChange={(e) => {
+              setDomainId(e.target.value);
+              setTargetId("");
+            }}
+          >
+            {(domains.data ?? []).map((d) => (
+              <option key={d.id} value={d.id}>
+                {d.name}
+              </option>
+            ))}
+          </select>
+          {kind === "dns.apply" && (
+            <select
+              aria-label="DNS provider"
+              value={providerId || providers.data?.[0]?.id || ""}
+              onChange={(e) => setProviderId(e.target.value)}
+            >
+              {(providers.data ?? []).map((p) => (
+                <option key={p.id} value={p.id}>
+                  {p.name}
+                </option>
+              ))}
+            </select>
+          )}
+          {kind === "mailbox.create" && (
+            <select
+              aria-label="Job mailbox"
+              value={targetId || mailboxes.data?.[0]?.id || ""}
+              onChange={(e) => setTargetId(e.target.value)}
+            >
+              {(mailboxes.data ?? []).map((m) => (
+                <option key={m.id} value={m.id}>
+                  {m.address}
+                </option>
+              ))}
+            </select>
+          )}
+          {kind === "alias.provision" && (
+            <select
+              aria-label="Job alias"
+              value={targetId || aliases.data?.[0]?.id || ""}
+              onChange={(e) => setTargetId(e.target.value)}
+            >
+              {(aliases.data ?? []).map((a) => (
+                <option key={a.id} value={a.id}>
+                  {a.source}
+                </option>
+              ))}
+            </select>
+          )}
+          <Button size="sm" disabled={busy || !activeDomain} onClick={enqueue}>
             <Play />
             Enqueue
           </Button>

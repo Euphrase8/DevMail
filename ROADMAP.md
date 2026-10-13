@@ -101,71 +101,28 @@ tests yet.
 - `[x]` `domain_check_results` → `GET /domains/:id/checks` (Phase 9).
 - `[x]` `jobs` → `POST /jobs` (enqueue), `POST /jobs/:id/retry|cancel` (Phase 9).
 
-### B. Frontend screens / operations not backed by the API
-Every frontend route and whether it reads/writes the real API was enumerated.
-`ResourcePage` renders **sample** rows and its create/edit/delete/verify actions
-call in-memory `save`/`remove`/`simulateCheck` only — never the API.
+### B. Frontend screens and operations  `[x]`
+Every product route now reads and mutates the versioned REST API. Servers, domains,
+users, mailboxes, aliases, DNS, providers, jobs, routing, backups, notifications,
+monitoring, audit, settings and the shell identity render connected or unavailable
+states; no screen displays fabricated operational data.
 
-- `[x]` **DNS records** (`/dns`) — real (`DnsPage`, Phase 10).
-- `[x]` **DNS providers** (`/providers`) — real (`ProvidersPage`, Phase 10).
-- `[x]` **Provisioning jobs** (`/jobs`) — real (`JobsPage`, Phase 9).
-- `[x]` **Overview** (`/`) — real (`dashboard`).
-- `[ ]` **Servers** (`/servers`) — **read live, write sample.** List is hydrated
-  from `GET /servers`, but create/edit/delete/check/check-all/maintenance still
-  call `save`/`simulateCheck`. Backend endpoints already exist and are unused.
-- `[ ]` **Domains** (`/domains`) — **read live, write sample.** Create/edit/delete/
-  verify/validate not wired though `POST|PATCH|DELETE /domains`, `/verify`,
-  `/validate` exist.
-- `[ ]` **Mailboxes** (`/mailboxes`) — **fully sample.** Backend is domain-scoped
-  (`GET|POST /domains/:id/mailboxes`, `PATCH|DELETE /mailboxes/:id`) and unused;
-  the screen has no domain selector.
-- `[ ]` **Aliases** (`/aliases`) — **fully sample.** Backend domain-scoped
-  (`GET|POST /domains/:id/aliases`, `DELETE /aliases/:id`) and unused.
-- `[ ]` **Users & access** (`/users`) — **read live, write sample.** Create/update/
-  delete not wired though `POST|PATCH|DELETE /users` exist.
-- `[ ]` **Settings** (`/settings`) — **fully sample.** `GET|PATCH /settings` exist
-  and are unused; the page only mutates the in-memory store.
-- `[ ]` **Audit log** (`/audit`) — **read live (page 1 only).** List is hydrated but
-  the `action` filter + pagination the backend supports are not exposed.
-- `[ ]` **Monitoring** (`/monitoring`) — partial: server-health panel is live; the
-  delivery/queue/spam/TLS metric tiles remain sample.
-- `[ ]` **Routing** (`/routing`), **Backups** (`/backups`),
-  **Notifications** (`/notifications`) — fully sample; no backend module yet (Phase 12).
-- `[~]` **Webmail** (`/webmail`) — external URL launcher; no backend needed (its
-  target URL comes from settings, which is itself unwired above).
-- `[ ]` **Read fidelity:** even "read-live" lists are lossy — `store.tsx` maps domain
-  mailbox/storage/provider columns and server usage/domain counts to placeholders
-  (`"0"`, `"Live / check"`, `provider:"manual"`); user `scope`/`lastLogin` are stubbed.
-  Real per-row aggregates need backend counts.
-- `[ ]` **Shell chrome:** workspace name (`"Acme workspace"`), the ⌘K search index,
-  and the header notification/account panels render sample data.
+### C. Provisioning  `[x]`
+Mailbox and alias changes enqueue durable work. The SQL mail-engine adapter applies
+virtual-domain records and the worker exposes retryable, observable outcomes. External
+mail delivery remains an explicitly configured infrastructure prerequisite.
 
-### C. Implemented-but-stubbed  `[ ]`
-- **Mail engine:** `main.go` still injects `mailboxes.NoopEngine{}`; mailbox/alias
-  mutations persist DB rows but do not provision; `GET /mailboxes/engine` reports
-  *unmanaged*.
-- **Provisioning worker:** the Phase 9 worker executes real enqueued jobs, but no
-  mailbox/alias/domain mutation enqueues a job automatically.
+### D. Auth and security  `[x]`
+Persistent rate limiting and lockout, rotating sessions, CSRF checks, MFA/TOTP,
+recovery codes, password/session controls, audit events, role enforcement and
+production cookie settings are implemented and integration-tested.
 
-### D. Auth & security gaps  `[ ]`
-- No MFA/TOTP (the `totp_secret` column exists but is unused).
-- No CSRF protection on cookie-authenticated mutations.
-- Cookie `Secure` hardcoded `false` (`auth/handler.go` Login/Logout); no session
-  rotation; no "revoke all sessions".
-- No self-service password change or admin-initiated reset.
-- In-memory rate limiting only; no account lockout.
-- Audit records **no** login success/failure/logout or setup events (the auth
-  package never calls `audit.Record`); no export.
-
-### E. Cross-cutting / infra
-- `[~]` Migrations: `0001_init` + `0002_dns` exist; still **no down migrations**
-  and minimal seeding.
-- `[~]` Pagination: `jobs` and `audit` return real `meta{page,perPage,total}`;
-  `mailboxes`, `aliases`, `servers`, `domains`, `users`, `providers` still report
-  `total = len` with no `page`/`perPage`; no filter/sort/search or bulk ops.
-- `[ ]` No OpenAPI spec.
-- `[ ]` No metrics/Prometheus endpoint; no liveness-vs-readiness split.
-- `[ ]` No Dockerfile/CI (Docker not installed on this machine — artifacts documented only).
+### E. Cross-cutting / infra  `[x]`
+Forward and rollback migrations, bounded request contracts, paginated/filterable/sortable
+lists, OpenAPI, protected Prometheus-style metrics, health/readiness endpoints,
+GitHub Actions, Docker images and Compose are included. Docker is not installed on this
+workstation, so the container stack is validated by configuration and CI rather than a
+local engine run.
 
 ### F. Contract notes
 - Aliases: create/delete only — **no update** endpoint.
@@ -316,13 +273,13 @@ works; login events appear in `/audit`.
 
 ---
 
-### Phase 15 — Cross-cutting polish  `[ ]`
+### Phase 15 — Cross-cutting polish  `[x]`
 **Tasks**
-- [ ] OpenAPI spec + request/response validation.
-- [ ] Real pagination + filter/sort/search across list endpoints.
-- [ ] `/metrics` (Prometheus-style) + liveness/readiness split.
-- [ ] Handler/integration/DB tests; CI (GitHub Actions).
-- [ ] Dockerfile + compose (documented; Docker not installed locally).
+- [x] OpenAPI spec + request/response validation.
+- [x] Real pagination + filter/sort/search across list endpoints.
+- [x] `/metrics` (Prometheus-style) + liveness/readiness split.
+- [x] Handler/integration/DB tests; CI (GitHub Actions).
+- [x] Dockerfile + compose (documented; Docker not installed locally).
 
 ---
 
@@ -333,11 +290,11 @@ works; login events appear in `/audit`.
 | 0–8 | Foundation → frontend wiring (baseline) | `[x]` | `9175d67` |
 | 9 | Surface collected telemetry | `[x]` | `4ebb81c` |
 | 10 | DNS records + providers | `[x]` | `4ebb81c` |
-| 11 | Real mail engine + provisioning | `[ ]` | — |
-| 12 | Routing / backups / notifications | `[ ]` | — |
-| 13 | Auth & session hardening | `[ ]` | — |
-| 14 | Frontend wiring | `[ ]` | — |
-| 15 | Cross-cutting polish | `[ ]` | — |
+| 11 | Real mail engine + provisioning | `[x]` | `de1f361` |
+| 12 | Routing / backups / notifications | `[x]` | `443ef61` |
+| 13 | Auth & session hardening | `[x]` | `98780a9` |
+| 14 | Frontend wiring | `[x]` | `92406fa` |
+| 15 | Cross-cutting polish | `[x]` | this commit |
 
 ---
 
@@ -361,3 +318,4 @@ works; login events appear in `/audit`.
 | 2026-10-13 | 13 | Signed session-bound CSRF, secure production cookies, TOTP encrypted enrollment + one-use recovery/replay protection, persistent lockout/rate limit, password/session APIs, security UI and login MFA, auth events and server role enforcement | PostgreSQL HTTP integration PASS: missing CSRF 403, operator writes/users 403, MFA/recovery replay, rotation, password revocation, persistent lockout, auth audit; full Go tests/vet PASS; frontend 18/18, lint 0 errors and typecheck PASS | phase-13 commit |
 
 | 2026-10-13 | 14 | All resource writes live; settings validation/atomic save; audit filter/pages/export; real aggregates and identity; removed fixture resources/metrics; corrected login cache race and Windows output watcher | PostgreSQL HTTP checks PASS; browser login + server/domain creation persisted; every remaining route rendered against API; Go tests/vet PASS; frontend 20/20, lint 0 errors, typecheck/build PASS | phase-14 commit |
+| 2026-10-13 | 15 | Added OpenAPI, bounded request contracts, safe list pagination/filter/sort/search, protected metrics and health probes, reversible migrations, CI, containers; removed inactive fixture code | Go tests/vet PASS; frontend 20/20, lint 0 errors, typecheck/build PASS; clean-PostgreSQL live CRUD/provision/teardown and OpenAPI/health probe PASS | this commit |

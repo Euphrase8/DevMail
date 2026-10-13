@@ -145,7 +145,11 @@ func (h *Handler) ListUsers(c *gin.Context) {
 		httpapi.InternalError(c)
 		return
 	}
-	httpapi.Respond(c, http.StatusOK, users)
+	items := make([]any, len(users))
+	for i := range users {
+		items[i] = users[i]
+	}
+	httpapi.RespondList(c, items, 1, len(items), len(items))
 }
 
 type userRequest struct {

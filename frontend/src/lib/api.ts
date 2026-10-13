@@ -90,6 +90,20 @@ async function requestFull<T>(path: string, init?: RequestInit): Promise<T> {
   return body as T;
 }
 
+export type Page<T> = { data: T[]; meta: { page: number; perPage: number; total: number } };
+async function allPages<T>(path: string): Promise<T[]> {
+  const records: T[] = [];
+  let page = 1;
+  for (;;) {
+    const result = await requestFull<Page<T>>(
+      `${path}${path.includes("?") ? "&" : "?"}page=${page}&perPage=200`,
+    );
+    records.push(...result.data);
+    if (records.length >= result.meta.total || result.data.length === 0) return records;
+    page++;
+  }
+}
+
 export type User = {
   id: string;
   email: string;
@@ -257,7 +271,17 @@ export type OpsRun = {
 export type OpsKind = "routing-rules" | "backups" | "notifications";
 
 export const api = {
-  listOps: (kind: OpsKind) => request<OpsResource[]>(`/${kind}`),
+  resourcePage: (
+    kind: "servers" | "domains" | "users",
+    page = 1,
+    q = "",
+    sort = "name",
+    order = "asc",
+  ) =>
+    requestFull<Page<Server | Domain | User>>(
+      `/${kind}?${new URLSearchParams({ page: String(page), perPage: "25", q, sort, order })}`,
+    ),
+  listOps: (kind: OpsKind) => allPages<OpsResource>(`/${kind}`),
   saveOps: (kind: OpsKind, payload: Omit<OpsResource, "id" | "createdAt">, id?: string) =>
     request<OpsResource>(`/${kind}${id ? `/${id}` : ""}`, {
       method: id ? "PATCH" : "POST",
@@ -312,7 +336,7 @@ export const api = {
   revokeSessions: () => request<{ ok: boolean }>("/auth/sessions", { method: "DELETE" }),
   rotateSession: () => request<{ ok: boolean }>("/auth/rotate", { method: "POST" }),
   me: () => request<User>("/auth/me"),
-  listUsers: () => request<User[]>("/users"),
+  listUsers: () => allPages<User>("/users"),
   createUser: (payload: { email: string; name: string; role: string; password: string }) =>
     request<User>("/users", { method: "POST", body: JSON.stringify(payload) }),
   updateUser: (id: string, payload: { name: string; role: string; password?: string }) =>
@@ -320,7 +344,7 @@ export const api = {
   deleteUser: (id: string) => request<{ ok: boolean }>(`/users/${id}`, { method: "DELETE" }),
 
   // Servers
-  listServers: () => request<Server[]>("/servers"),
+  listServers: () => allPages<Server>("/servers"),
   createServer: (
     payload: Omit<Server, "id" | "status" | "maintenance" | "lastCheckAt" | "lastCheckError">,
   ) => request<Server>("/servers", { method: "POST", body: JSON.stringify(payload) }),
@@ -338,7 +362,7 @@ export const api = {
     }),
 
   // Domains
-  listDomains: () => request<Domain[]>("/domains"),
+  listDomains: () => allPages<Domain>("/domains"),
   createDomain: (payload: {
     name: string;
     serverId?: string;
@@ -361,7 +385,7 @@ export const api = {
     ),
   provisionDomain: (id: string) =>
     request<{ status: string }>(`/domains/${id}/provision`, { method: "POST" }),
-  listMailboxes: (domainId: string) => request<Mailbox[]>(`/domains/${domainId}/mailboxes`),
+  listMailboxes: (domainId: string) => allPages<Mailbox>(`/domains/${domainId}/mailboxes`),
   createMailbox: (
     domainId: string,
     payload: { local: string; displayName?: string; quotaBytes?: number; password?: string },
@@ -375,7 +399,7 @@ export const api = {
     payload: { displayName?: string; quotaBytes?: number; password?: string },
   ) => request<Mailbox>(`/mailboxes/${id}`, { method: "PATCH", body: JSON.stringify(payload) }),
   deleteMailbox: (id: string) => request<{ ok: boolean }>(`/mailboxes/${id}`, { method: "DELETE" }),
-  listAliases: (domainId: string) => request<Alias[]>(`/domains/${domainId}/aliases`),
+  listAliases: (domainId: string) => allPages<Alias>(`/domains/${domainId}/aliases`),
   createAlias: (
     domainId: string,
     payload: { source: string; destination: string; forwarding?: boolean },
@@ -441,7 +465,7 @@ export const api = {
         body: JSON.stringify({ providerId }),
       },
     ),
-  listProviders: () => request<DnsProvider[]>("/providers"),
+  listProviders: () => allPages<DnsProvider>("/providers"),
   createProvider: (payload: { name: string; kind: string; zone?: string; token?: string }) =>
     request<DnsProvider>("/providers", { method: "POST", body: JSON.stringify(payload) }),
   updateProvider: (

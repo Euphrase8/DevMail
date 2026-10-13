@@ -16,7 +16,7 @@ $null = Call-Api POST '/auth/setup' @{email=$email;name='Verification';password=
 $null = Call-Api POST '/auth/login' @{email=$email;password=$password}
 $domain = Call-Api POST '/domains' @{name=('verify-' + [guid]::NewGuid().ToString('N') + '.example.test')}
 $mailbox = Call-Api POST "/domains/$($domain.id)/mailboxes" @{local='alice';displayName='Alice';password=$password;quotaBytes=1073741824}
-$list = Call-Api GET "/domains/$($domain.id)/mailboxes"
+$list = @(Call-Api GET "/domains/$($domain.id)/mailboxes?perPage=10")
 if ($list.Count -ne 1 -or $list[0].address -ne "alice@$($domain.name)") { throw 'Mailbox listing failed' }
 $deadline = (Get-Date).AddSeconds(15)
 do {

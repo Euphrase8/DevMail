@@ -8,6 +8,7 @@ import (
 	"context"
 	"errors"
 	"net/http"
+	"net/mail"
 	"strings"
 	"time"
 
@@ -126,10 +127,7 @@ func scanMailbox(row rowScanner) (*Mailbox, error) {
 
 // ListByDomain returns mailboxes for a domain.
 func (s *Service) ListByDomain(ctx context.Context, domainID string) ([]*Mailbox, error) {
-	rows, err := s.pool.Query(ctx, `
-		SELECT `+mailboxColsJoined+` FROM mailboxes mb JOIN domains d ON d.id=mb.domain_id
-		WHERE mb.domain_id = $1 AND mb.deleted_at IS NULL
-		ORDER BY mb.local`, domainID)
+	rows, err := httpapi.PageRows(ctx, s.pool, mailboxColsJoined, "mailboxes mb JOIN domains d ON d.id=mb.domain_id", "mb.domain_id=$1 AND mb.deleted_at IS NULL AND d.deleted_at IS NULL", "mb.local,mb.id", []string{"mb.local", "mb.display_name"}, map[string]string{"name": "mb.local", "local": "mb.local", "createdAt": "mb.created_at", "status": "mb.status"}, "mb.status", domainID)
 	if err != nil {
 		return nil, err
 	}
@@ -252,9 +250,7 @@ func scanAlias(row rowScanner) (*Alias, error) {
 
 // ListAliases returns aliases for a domain.
 func (s *Service) ListAliases(ctx context.Context, domainID string) ([]*Alias, error) {
-	rows, err := s.pool.Query(ctx, `
-		SELECT `+aliasColumns+` FROM aliases al
-		WHERE al.domain_id=$1 AND al.deleted_at IS NULL ORDER BY al.source`, domainID)
+	rows, err := httpapi.PageRows(ctx, s.pool, aliasColumns, "aliases al", "al.domain_id=$1 AND al.deleted_at IS NULL", "al.source,al.id", []string{"al.source", "al.destination"}, map[string]string{"name": "al.source", "source": "al.source", "createdAt": "al.created_at"}, "al.enabled", domainID)
 	if err != nil {
 		return nil, err
 	}
@@ -335,11 +331,8 @@ func (h *Handler) validateDestination(addr string) map[string]any {
 }
 
 func validAddr(addr string) bool {
-	at := strings.LastIndex(addr, "@")
-	if at <= 0 || at == len(addr)-1 {
-		return false
-	}
-	return !strings.Contains(addr[at+1:], "@")
+	parsed, err := mail.ParseAddress(addr)
+	return err == nil && parsed.Address == addr
 }
 
 // RegisterRoutes attaches the mailboxes/aliases API to the router group
@@ -394,8 +387,8 @@ func (h *Handler) Create(c *gin.Context) {
 			fields[k] = v
 		}
 	}
-	if req.Password != "" && len(req.Password) < 8 {
-		fields["password"] = "Password must be at least 8 characters."
+	if len(req.Password) < 12 {
+		fields["password"] = "Password must be at least 12 characters."
 	}
 	if req.QuotaBytes < 0 {
 		fields["quotaBytes"] = "Quota cannot be negative."
@@ -435,12 +428,16 @@ func (h *Handler) Update(c *gin.Context) {
 		httpapi.Fail(c, http.StatusBadRequest, httpapi.ErrBadRequest, "Invalid request body.")
 		return
 	}
-	if req.Password != "" && len(req.Password) < 8 {
-		httpapi.FailFields(c, "Password must be at least 8 characters.", map[string]any{"password": "Password must be at least 8 characters."})
+	if req.Password != "" && len(req.Password) < 12 {
+		httpapi.FailFields(c, "Password must be at least 12 characters.", map[string]any{"password": "Password must be at least 12 characters."})
 		return
 	}
 	ctx, cancel := context.WithTimeout(c.Request.Context(), 10*time.Second)
 	defer cancel()
+	if req.QuotaBytes < 0 {
+		httpapi.FailFields(c, "Quota cannot be negative.", nil)
+		return
+	}
 	mb, err := h.svc.Update(ctx, c.Param("mailbox_id"), req.DisplayName, req.QuotaBytes, req.Password)
 	if err != nil {
 		httpapi.Fail(c, http.StatusNotFound, httpapi.ErrNotFound, "Mailbox not found.")

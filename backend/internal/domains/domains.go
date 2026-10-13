@@ -95,7 +95,7 @@ func scanDomain(row rowScanner) (*Domain, error) {
 
 // List returns all non-deleted domains.
 func (s *Service) List(ctx context.Context) ([]*Domain, error) {
-	rows, err := s.pool.Query(ctx, `SELECT `+domainColumns+` FROM domains WHERE deleted_at IS NULL ORDER BY created_at`)
+	rows, err := httpapi.PageRows(ctx, s.pool, domainColumns, "domains", "deleted_at IS NULL", "created_at,id", []string{"name"}, map[string]string{"name": "name", "createdAt": "created_at", "status": "status"}, "status")
 	if err != nil {
 		return nil, err
 	}

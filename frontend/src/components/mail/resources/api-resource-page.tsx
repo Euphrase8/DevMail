@@ -9,14 +9,12 @@ type Kind = "servers" | "domains" | "users";
 type Item = Server | Domain | User;
 export function ApiResourcePage({ kind }: { kind: Kind }) {
   const client = useQueryClient();
-  const rows = useQuery<Item[]>({
-    queryKey: [kind],
-    queryFn: () =>
-      kind === "servers"
-        ? api.listServers()
-        : kind === "domains"
-          ? api.listDomains()
-          : api.listUsers(),
+  const [page, setPage] = useState(1);
+  const [search, setSearch] = useState("");
+  const [sort, setSort] = useState("name");
+  const rows = useQuery({
+    queryKey: [kind, "page", page, search, sort],
+    queryFn: () => api.resourcePage(kind, page, search, sort),
   });
   const servers = useQuery({
     queryKey: ["servers"],
@@ -28,7 +26,6 @@ export function ApiResourcePage({ kind }: { kind: Kind }) {
   const [deletion, setDeletion] = useState<Item | null>(null);
   const [message, setMessage] = useState("");
   const [busy, setBusy] = useState(false);
-  const [search, setSearch] = useState("");
   const checks = useQuery({
     queryKey: ["domain-checks", detail?.id],
     queryFn: () => api.getDomainChecks(detail!.id),
@@ -113,9 +110,7 @@ export function ApiResourcePage({ kind }: { kind: Kind }) {
         ? ["name", "serverId", "quotaBytes", "catchAll"]
         : ["name", "email", "role", "password"];
   const title = kind[0]!.toUpperCase() + kind.slice(1);
-  const shown = (rows.data ?? []).filter((row) =>
-    JSON.stringify(row).toLowerCase().includes(search.toLowerCase()),
-  );
+  const shown = rows.data?.data ?? [];
   return (
     <div className="space-y-6">
       <div className="flex justify-between">
@@ -131,13 +126,27 @@ export function ApiResourcePage({ kind }: { kind: Kind }) {
           aria-label={`Search ${kind}`}
           placeholder="Search records"
           value={search}
-          onChange={(e) => setSearch(e.target.value)}
+          onChange={(e) => {
+            setSearch(e.target.value);
+            setPage(1);
+          }}
         />
         {kind === "servers" && (
           <Button disabled={busy} onClick={() => void run(api.checkAllServers)}>
             Check all servers
           </Button>
         )}
+        <select
+          aria-label="Sort records"
+          value={sort}
+          onChange={(e) => {
+            setSort(e.target.value);
+            setPage(1);
+          }}
+        >
+          <option value="name">Name</option>
+          <option value="createdAt">Created time</option>
+        </select>
         <Button variant="outline" onClick={() => void rows.refetch()}>
           Refresh
         </Button>
@@ -218,6 +227,20 @@ export function ApiResourcePage({ kind }: { kind: Kind }) {
         </tbody>
       </table>
       {!rows.isPending && !rows.isError && !shown.length && <p>No records found.</p>}
+      <div className="flex gap-4">
+        <Button disabled={page === 1} onClick={() => setPage(page - 1)}>
+          Previous
+        </Button>
+        <span>
+          Page {page} � {rows.data?.meta.total ?? 0} records
+        </span>
+        <Button
+          disabled={!rows.data || page * 25 >= rows.data.meta.total}
+          onClick={() => setPage(page + 1)}
+        >
+          Next
+        </Button>
+      </div>
       <Dialog
         open={!!editor}
         onOpenChange={(open) => {

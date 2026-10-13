@@ -6,6 +6,7 @@ import (
 	"strings"
 	"time"
 
+	"github.com/Euphrase8/DevMail/backend/internal/httpapi"
 	"github.com/jackc/pgx/v5"
 	"github.com/jackc/pgx/v5/pgxpool"
 )
@@ -194,7 +195,7 @@ func (s *Service) CreateUser(ctx context.Context, email, name string, role Role,
 
 // ListUsers lists all administrators.
 func (s *Service) ListUsers(ctx context.Context) ([]*User, error) {
-	rows, err := s.pool.Query(ctx, `SELECT `+userColumns+` FROM users ORDER BY created_at`)
+	rows, err := httpapi.PageRows(ctx, s.pool, userColumns, "users", "true", "created_at,id", []string{"name", "email"}, map[string]string{"name": "name", "email": "email", "createdAt": "created_at"}, "is_active")
 	if err != nil {
 		return nil, err
 	}

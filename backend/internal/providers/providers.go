@@ -90,7 +90,7 @@ func NewService(pool *pgxpool.Pool, passphrase string) *Service {
 
 // List returns all non-deleted providers.
 func (s *Service) List(ctx context.Context) ([]*Provider, error) {
-	rows, err := s.pool.Query(ctx, `SELECT `+providerColumns+` FROM dns_providers WHERE deleted_at IS NULL ORDER BY created_at`)
+	rows, err := httpapi.PageRows(ctx, s.pool, providerColumns, "dns_providers", "deleted_at IS NULL", "created_at,id", []string{"name", "zone", "kind"}, map[string]string{"name": "name", "createdAt": "created_at", "status": "status"}, "status")
 	if err != nil {
 		return nil, err
 	}

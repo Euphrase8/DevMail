@@ -85,7 +85,7 @@ func TestProvisioningIntegration(t *testing.T) {
 		return envelope.Data
 	}
 	call("GET", "/mailboxes/engine", "", 401)
-	credentials := `{"email":"admin@example.test","name":"Admin","password":"Strong-test-password-123"}`
+	credentials := `{"email":"admin@example.test","password":"Strong-test-password-123"}`
 	call("POST", "/auth/setup", credentials, 201)
 	call("POST", "/auth/login", credentials, 200)
 	call("PATCH", "/settings", `{"name":"Verified workspace","timezone":"UTC","webmail":"https://webmail.example.test","mailEngine":"sql","defaultQuotaBytes":2048}`, 200)

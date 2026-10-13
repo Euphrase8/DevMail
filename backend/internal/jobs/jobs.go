@@ -36,15 +36,15 @@ type Job struct {
 // KnownKinds enumerates the job kinds the worker understands. Enqueue rejects
 // anything outside this set so the queue never fills with unconsumable work.
 var KnownKinds = map[string]bool{
-	"server.dns_rebuild": true,
-	"domain.provision":   true,
-	"domain.remove":      true,
-	"dns.apply":          true,
-	"mailbox.create":     true,
-	"mailbox.password":   true,
-	"mailbox.delete":     true,
-	"alias.provision":    true,
-	"alias.delete":       true,
+
+	"domain.provision": true,
+	"domain.remove":    true,
+	"dns.apply":        true,
+	"mailbox.create":   true,
+	"mailbox.password": true,
+	"mailbox.delete":   true,
+	"alias.provision":  true,
+	"alias.delete":     true,
 }
 
 // Consumer executes a job of a given kind. The returned value is stored as the
@@ -145,8 +145,29 @@ func (s *Service) Enqueue(ctx context.Context, kind string, payload any) (*Job, 
 	if !KnownKinds[kind] {
 		return nil, errUnknownKind{kind}
 	}
+	if _, ok := s.consumer(kind); !ok {
+		return nil, errUnknownKind{kind}
+	}
+	bytes, err := json.Marshal(payload)
+	if err != nil {
+		return nil, err
+	}
+	var fields map[string]string
+	if json.Unmarshal(bytes, &fields) != nil {
+		return nil, errUnknownKind{kind}
+	}
+	keys := map[string][]string{"domain.provision": {"domainId"}, "domain.remove": {"domainId"}, "dns.apply": {"domainId", "providerId"}, "mailbox.create": {"mailboxId"}, "mailbox.password": {"mailboxId"}, "mailbox.delete": {"mailboxId"}, "alias.provision": {"aliasId"}, "alias.delete": {"source"}}[kind]
+	if len(fields) != len(keys) {
+		return nil, errUnknownKind{kind}
+	}
+	for _, key := range keys {
+		value := fields[key]
+		if value == "" || (key != "source" && !httpapi.IsUUID(value)) {
+			return nil, errUnknownKind{kind}
+		}
+	}
 	var raw []byte
-	var err error
+
 	if payload != nil {
 		if raw, err = json.Marshal(payload); err != nil {
 			return nil, err
@@ -353,7 +374,7 @@ func (h *Handler) Create(c *gin.Context) {
 	j, err := h.svc.Enqueue(ctx, req.Kind, req.Payload)
 	if err != nil {
 		if isUnknownKind(err) {
-			httpapi.Fail(c, 422, httpapi.ErrValidation, "Unknown job kind.")
+			httpapi.Fail(c, 422, httpapi.ErrValidation, "Job kind is unavailable or payload does not match its required resource IDs.")
 			return
 		}
 		httpapi.InternalError(c)

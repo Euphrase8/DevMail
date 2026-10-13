@@ -26,6 +26,7 @@ import (
 	"github.com/Euphrase8/DevMail/backend/internal/servers"
 	"github.com/Euphrase8/DevMail/backend/internal/settings"
 	"github.com/gin-gonic/gin"
+	"github.com/gin-gonic/gin/binding"
 	"github.com/jackc/pgx/v5/pgxpool"
 )
 
@@ -45,9 +46,11 @@ func NewRouter(opts Options) *gin.Engine {
 		opts.MailEngine = engine.Noop{}
 	}
 	gin.SetMode(gin.ReleaseMode)
+	binding.EnableDecoderDisallowUnknownFields = true
 	r := gin.New()
+	metrics := monitoring.NewMetrics()
 	r.Use(httpapi.RecoverMiddleware(opts.Logger), httpapi.RequestIDMiddleware(opts.Logger),
-		httpapi.SecurityHeadersMiddleware(), httpapi.CORSMiddleware(opts.Config.AllowedOrigins))
+		httpapi.SecurityHeadersMiddleware(), httpapi.CORSMiddleware(opts.Config.AllowedOrigins), httpapi.ListMiddleware(), httpapi.ContractMiddleware(), metrics.Middleware())
 	_ = r.SetTrustedProxies(nil)
 
 	rec := audit.NewRecorder(opts.Pool)
@@ -66,13 +69,30 @@ func NewRouter(opts Options) *gin.Engine {
 		if err := opts.Pool.Ping(ctx); err != nil {
 			db = "error"
 		}
-		c.JSON(http.StatusOK, gin.H{"data": gin.H{
+		status := http.StatusOK
+		if db != "ok" {
+			status = http.StatusServiceUnavailable
+		}
+		c.JSON(status, gin.H{"data": gin.H{
 			"status":  "ok",
 			"db":      db,
 			"time":    time.Now().UTC().Format(time.RFC3339),
 			"version": "0.1.0",
 		}})
 	})
+	v1.GET("/health/live", func(c *gin.Context) { httpapi.Respond(c, 200, gin.H{"status": "ok"}) })
+	v1.GET("/health/ready", func(c *gin.Context) {
+		ctx, cancel := context.WithTimeout(c.Request.Context(), 3*time.Second)
+		defer cancel()
+		if opts.Pool.Ping(ctx) != nil {
+			httpapi.Fail(c, 503, httpapi.ErrInternal, "Database unavailable.")
+			return
+		}
+		httpapi.Respond(c, 200, gin.H{"status": "ready"})
+	})
+	v1.GET("/metrics", authMw, auth.RequireRole(auth.RoleServerAdmin), metrics.Serve)
+	r.GET("/metrics", authMw, auth.RequireRole(auth.RoleServerAdmin), metrics.Serve)
+	v1.GET("/openapi.json", func(c *gin.Context) { c.JSON(200, OpenAPI(r)) })
 
 	// Auth module owns its own public + protected routes.
 	auth.Register(v1, opts.Pool, authMw, opts.Config.SecretKey, !opts.Config.IsDevelopment())

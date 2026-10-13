@@ -18,7 +18,10 @@ function mount() {
 }
 describe("Live resource UI", () => {
   it("saves a domain through the API and refreshes its list", async () => {
-    vi.spyOn(api, "listDomains").mockResolvedValue([]);
+    vi.spyOn(api, "resourcePage").mockResolvedValue({
+      data: [],
+      meta: { page: 1, perPage: 25, total: 0 },
+    });
     vi.spyOn(api, "listServers").mockResolvedValue([]);
     const create = vi.spyOn(api, "createDomain").mockResolvedValue({
       id: "domain",
@@ -47,7 +50,10 @@ describe("Live resource UI", () => {
     await waitFor(() => expect(screen.queryByRole("dialog")).toBeNull());
   });
   it("keeps the form open and displays backend validation failures", async () => {
-    vi.spyOn(api, "listDomains").mockResolvedValue([]);
+    vi.spyOn(api, "resourcePage").mockResolvedValue({
+      data: [],
+      meta: { page: 1, perPage: 25, total: 0 },
+    });
     vi.spyOn(api, "listServers").mockResolvedValue([]);
     vi.spyOn(api, "createDomain").mockRejectedValue(new Error("Domain already exists."));
     mount();

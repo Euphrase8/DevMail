@@ -40,6 +40,12 @@ func Respond(c *gin.Context, status int, data any) {
 
 // RespondList writes a paginated collection under {"data": ..., "meta": ...}.
 func RespondList(c *gin.Context, data []any, page, perPage, total int) {
+	if options, ok := c.Request.Context().Value(listContextKey{}).(*ListOptions); ok && options.Applied {
+		page, perPage, total = options.Page, options.PerPage, options.Total
+	}
+	if data == nil {
+		data = []any{}
+	}
 	c.JSON(http.StatusOK, gin.H{
 		"data": data,
 		"meta": gin.H{"page": page, "perPage": perPage, "total": total},

@@ -1,8 +1,8 @@
 import { createFileRoute } from "@tanstack/react-router";
 import { MailboxesPage } from "@/components/mail/resources/mailboxes-page";
-import { modules, routeMeta } from "@/lib/mail/data";
+import { routeMeta } from "@/lib/mail/data";
 export const Route = createFileRoute("/aliases")({
-  head: () => routeMeta(modules["aliases"]!.title, modules["aliases"]!.description),
+  head: () => routeMeta("Aliases", "Domain-scoped email alias management."),
   component: Page,
 });
 function Page() {

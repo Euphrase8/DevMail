@@ -36,7 +36,11 @@ func Connect(ctx context.Context, url string) (*pgxpool.Pool, error) {
 // EnsureDatabase creates the devmail database when it does not exist yet,
 // connecting to the "postgres" maintenance database with same credentials.
 func EnsureDatabase(ctx context.Context, url string) error {
-	dbName := "devmail"
+	parsed, parseErr := pgx.ParseConfig(url)
+	if parseErr != nil {
+		return fmt.Errorf("invalid database configuration")
+	}
+	dbName := parsed.Database
 
 	parts := strings.SplitN(url, "://", 2)
 	if len(parts) != 2 {
@@ -63,7 +67,7 @@ func EnsureDatabase(ctx context.Context, url string) error {
 	if exists {
 		return nil
 	}
-	if _, err := conn.Exec(ctx, "CREATE DATABASE "+dbName); err != nil {
+	if _, err := conn.Exec(ctx, "CREATE DATABASE "+pgx.Identifier{dbName}.Sanitize()); err != nil {
 		return fmt.Errorf("create %s database: %w", dbName, err)
 	}
 	return nil
@@ -87,7 +91,7 @@ func Migrate(ctx context.Context, pool *pgxpool.Pool) error {
 	}
 	names := make([]string, 0, len(entries))
 	for _, e := range entries {
-		if strings.HasSuffix(e.Name(), ".sql") {
+		if strings.HasSuffix(e.Name(), ".sql") && !strings.HasSuffix(e.Name(), ".down.sql") {
 			names = append(names, e.Name())
 		}
 	}

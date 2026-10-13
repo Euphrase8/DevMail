@@ -45,7 +45,7 @@ func (r *Resource) Register(group *gin.RouterGroup, path string, middleware ...g
 	g.DELETE("/:id", r.Delete)
 }
 func (r *Resource) List(c *gin.Context) {
-	rows, err := r.Pool.Query(c.Request.Context(), `SELECT id::text,name,enabled,config,created_at FROM `+r.Table+` ORDER BY created_at DESC,id`)
+	rows, err := PageRows(c.Request.Context(), r.Pool, "id::text,name,enabled,config,created_at", r.Table, "true", "created_at DESC,id", []string{"name"}, map[string]string{"name": "name", "createdAt": "created_at"}, "enabled")
 	if err != nil {
 		InternalError(c)
 		return

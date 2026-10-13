@@ -64,7 +64,7 @@ func scanServer(row interface{ Scan(...any) error }) (*Server, error) {
 
 // List returns all non-soft-deleted servers.
 func (s *Service) List(ctx context.Context) ([]*Server, error) {
-	rows, err := s.pool.Query(ctx, `SELECT `+selectColumns+` FROM servers WHERE deleted_at IS NULL ORDER BY created_at`)
+	rows, err := httpapi.PageRows(ctx, s.pool, selectColumns, "servers", "deleted_at IS NULL", "created_at,id", []string{"name", "hostname", "location"}, map[string]string{"name": "name", "createdAt": "created_at", "status": "status"}, "status")
 	if err != nil {
 		return nil, err
 	}
