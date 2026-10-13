@@ -2,6 +2,7 @@ import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
 import { fireEvent, render, screen, waitFor, cleanup } from "@testing-library/react";
 import { afterEach, describe, it, expect, vi } from "vitest";
 import { ApiResourcePage } from "@/components/mail/resources/api-resource-page";
+import { SettingsPage } from "@/components/mail/settings/settings-page";
 import { api } from "@/lib/api";
 afterEach(() => {
   cleanup();
@@ -13,6 +14,15 @@ function mount() {
       client={new QueryClient({ defaultOptions: { queries: { retry: false } } })}
     >
       <ApiResourcePage kind="domains" />
+    </QueryClientProvider>,
+  );
+}
+function mountSettings() {
+  return render(
+    <QueryClientProvider
+      client={new QueryClient({ defaultOptions: { queries: { retry: false } } })}
+    >
+      <SettingsPage />
     </QueryClientProvider>,
   );
 }
@@ -64,5 +74,30 @@ describe("Live resource UI", () => {
       expect(screen.getByRole("alert")).toHaveTextContent("Domain already exists."),
     );
     expect(screen.getByRole("dialog")).toBeInTheDocument();
+  });
+  it("saves workspace settings through the API and exposes the restored hub sections", async () => {
+    vi.spyOn(api, "getSettings").mockResolvedValue({
+      name: "DevMail",
+      timezone: "UTC",
+      webmail: "",
+      defaultQuotaBytes: 10737418240,
+      mailEngine: "none",
+    });
+    const update = vi.spyOn(api, "updateSettings").mockResolvedValue({});
+    mountSettings();
+    await screen.findByRole("heading", { name: "Settings hub" });
+    expect(screen.getByRole("button", { name: "DNS providers" })).toBeInTheDocument();
+    expect(screen.getByRole("button", { name: "API & integrations" })).toBeInTheDocument();
+    fireEvent.change(screen.getByLabelText("Workspace name"), { target: { value: "Operations" } });
+    fireEvent.click(screen.getByRole("button", { name: "Save changes" }));
+    await waitFor(() =>
+      expect(update).toHaveBeenCalledWith({
+        name: "Operations",
+        timezone: "UTC",
+        webmail: "",
+        defaultQuotaBytes: 10737418240,
+        mailEngine: "none",
+      }),
+    );
   });
 });
