@@ -2,11 +2,11 @@ root = "."
 tmp_dir = "bin/.air"
 [build]
   cmd = "go build -o bin/devmail-api.exe ./cmd/api"
-  bin = "bin/devmail-api.exe"
+  entrypoint = "bin/devmail-api.exe"
   include_ext = ["go", "sql"]
   include_dir = ["cmd", "internal", "migrations"]
   exclude_dir = ["bin"]
-  env = ["HTTP_ADDR=:8090", "GOOS=windows", "GOARCH=amd64"]
+  env = ["HTTP_ADDR=:7000"]
   delay = 400
   stop_on_error = true
   kill_delay = 500

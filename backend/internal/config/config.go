@@ -24,7 +24,7 @@ type Config struct {
 // Load reads configuration from the environment.
 func Load() Config {
 	cfg := Config{
-		HTTPAddr:             getenv("HTTP_ADDR", ":8082"),
+		HTTPAddr:             getenv("HTTP_ADDR", ":7000"),
 		DatabaseURL:          getenv("DATABASE_URL", "postgres://postgres:1508@127.0.0.1:5432/devmail?sslmode=disable"),
 		AllowPrivateNetworks: getenv("ALLOW_PRIVATE_NETWORKS", "false") == "true",
 		Env:                  getenv("APP_ENV", "development"),
