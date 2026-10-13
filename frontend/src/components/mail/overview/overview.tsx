@@ -1,368 +1,57 @@
-import { useState } from "react";
 import { Link } from "@tanstack/react-router";
-import { useQueryClient } from "@tanstack/react-query";
-import {
-  ArrowDownLeft,
-  ArrowRight,
-  ArrowUpRight,
-  Check,
-  ChevronDown,
-  Clock3,
-  Globe,
-  Inbox,
-  Plus,
-  RefreshCw,
-  Server,
-  ShieldCheck,
-  TriangleAlert,
-} from "lucide-react";
+import { useQuery } from "@tanstack/react-query";
+import { api } from "@/lib/api";
 import { Button } from "@/components/ui/button";
-import {
-  Select,
-  SelectContent,
-  SelectItem,
-  SelectTrigger,
-  SelectValue,
-} from "@/components/ui/select";
-import { useMail } from "../store";
-import { InfrastructureMap, Status, TrafficChart, ViewLink } from "../shared/visualizations";
 export function Overview() {
-  const [period, setPeriod] = useState("24 hours");
-  const [refreshing, setRefreshing] = useState(false);
-  const { data, notify, backend, dashboard } = useMail();
-  const queryClient = useQueryClient();
-  const refresh = () => {
-    if (!refreshing) setRefreshing(true);
-    notify(
-      backend === "online"
-        ? "Live data refreshed."
-        : "Sample metrics refreshed. Live health checks are not connected.",
-    );
-    queryClient.invalidateQueries({ queryKey: ["dashboard"] });
-    queryClient.invalidateQueries({ queryKey: ["servers"] });
-    queryClient.invalidateQueries({ queryKey: ["health"] });
-    setTimeout(() => setRefreshing(false), 600);
-  };
-  const serversHealthy = dashboard
-    ? `${dashboard.servers.healthy} of ${dashboard.servers.total} servers healthy`
-    : "2 of 3 servers healthy";
-  const metrics = [
-    {
-      label: "MAIL SERVERS",
-      value:
-        backend === "online" ? (dashboard?.servers.total ?? 0) : (data["servers"] ?? []).length,
-      foot:
-        backend === "online"
-          ? dashboard
-            ? `${dashboard.servers.healthy}/${dashboard.servers.total} healthy`
-            : "—"
-          : "Across 3 regions",
-      icon: Server,
-      change:
-        backend === "online"
-          ? dashboard
-            ? `${dashboard.servers.degraded} degraded`
-            : "—"
-          : "2 healthy",
-    },
-    {
-      label: "ACTIVE DOMAINS",
-      value:
-        backend === "online" ? (dashboard?.domains.active ?? 0) : (data["domains"] ?? []).length,
-      foot:
-        backend === "online"
-          ? dashboard
-            ? `${dashboard.domains.verified} verified`
-            : "—"
-          : "1 needs attention",
-      icon: Globe,
-      change:
-        backend === "online"
-          ? dashboard
-            ? `${dashboard.domains.pending} pending`
-            : "—"
-          : "+2 this month",
-    },
-    {
-      label: "MAILBOXES",
-      value: backend === "online" ? (dashboard?.mailboxes ?? 0) : "150",
-      foot:
-        backend === "online"
-          ? dashboard
-            ? `${dashboard.mailboxes} managed`
-            : "—"
-          : "54.2 GB total storage",
-      icon: Inbox,
-      change: backend === "online" ? "live" : "+12 this month",
-    },
-    {
-      label: "MESSAGES TODAY",
-      value: "12,846",
-      foot: backend === "online" ? "Traffic telemetry not wired" : "99.8% delivery rate",
-      icon: ArrowUpRight,
-      change: "+18.6%",
-    },
-  ];
+  const summary = useQuery({ queryKey: ["dashboard"], queryFn: api.dashboard });
   return (
-    <div className="page-enter">
-      <div className="grid grid-cols-[minmax(0,1fr)_auto] items-start gap-4">
-        <div className="min-w-0">
-          <div className="eyebrow mb-3 flex items-center gap-2">
-            <span className="text-primary">WORKSPACE</span>
-            <span>/</span>OVERVIEW
-          </div>
-          <h1 className="page-title">
-            Your mail, <span className="text-primary">in sync.</span>
-          </h1>
-          <p className="mt-3 text-[13px] text-muted-foreground">
-            A clear view of everything that keeps your conversations moving.
-          </p>
-        </div>
-        <div className="mt-6 hidden items-center gap-2 sm:flex">
-          <Button variant="outline" size="sm" onClick={refresh} title="Refresh overview">
-            <RefreshCw className={`size-3 ${refreshing ? "animate-spin" : ""}`} />
-            Refresh
-          </Button>
-          <Button size="sm" asChild>
-            <Link to="/servers" search={{ action: "new" }}>
-              {" "}
-              <Plus className="size-3" />
-              Add server
-            </Link>
-          </Button>
-        </div>
+    <div className="space-y-8">
+      <div className="flex justify-between">
+        <h1 className="page-title">Workspace overview</h1>
+        <Button onClick={() => void summary.refetch()}>Refresh</Button>
       </div>
-      <div className="mt-7 flex items-center justify-between gap-3 border-y border-border py-3">
-        <div className="flex flex-wrap items-center gap-x-5 gap-y-2 text-[11px]">
-          <span className="flex items-center gap-2">
-            <span className="live-dot" />
-            {backend === "online"
-              ? "Infrastructure reporting live"
-              : "Infrastructure running on sample data"}
-          </span>
-          <span className="hidden text-muted-foreground sm:inline">{serversHealthy}</span>
-        </div>
-        <span className="flex shrink-0 items-center gap-1.5 text-[10px] text-muted-foreground">
-          <Clock3 className="size-3" />
-          {backend === "online" ? "Live snapshot" : "Sample snapshot"}
-        </span>
-      </div>
-      <div className="grid grid-cols-2 gap-y-3 py-7 lg:grid-cols-4">
-        {metrics.map((m) => (
-          <div className="metric" key={m.label}>
-            <div className="flex items-center justify-between">
-              <span className="eyebrow">{m.label}</span>
-              <m.icon className="size-3.5 text-muted-foreground" />
-            </div>
-            <div className="metric-number mt-2">{m.value}</div>
-            <div className="mb-3 text-[10px] text-primary">{m.change}</div>
-            <div className="text-[11px] text-muted-foreground">{m.foot}</div>
-          </div>
-        ))}
-      </div>
-      <div className="grid border-y border-border lg:grid-cols-[1.2fr_1fr]">
-        <section className="min-w-0 py-6 lg:border-r lg:border-border lg:pr-7">
-          <div className="grid grid-cols-[minmax(0,1fr)_auto] items-center">
-            <div>
-              <h2 className="section-heading">Mail traffic</h2>
-              <p className="mt-1 text-[11px] text-muted-foreground">
-                Every message. A little more connected.
-              </p>
-            </div>
-            <Select value={period} onValueChange={setPeriod}>
-              <SelectTrigger aria-label="Traffic time range" className="h-7 w-24 px-2 text-[10px]">
-                <SelectValue />
-              </SelectTrigger>
-              <SelectContent>
-                <SelectItem value="24 hours">24 hours</SelectItem>
-                <SelectItem value="7 days">7 days</SelectItem>
-                <SelectItem value="30 days">30 days</SelectItem>
-              </SelectContent>
-            </Select>
-          </div>
-          <TrafficChart period={period} />
-          <div className="mt-2 flex items-center justify-between">
-            <div className="flex gap-5 text-[10px] text-muted-foreground">
-              <span className="flex items-center gap-2">
-                <span className="h-1.5 w-1.5 rounded-full bg-primary" />
-                Delivered <span className="text-foreground">8,642</span>
-              </span>
-              <span className="flex items-center gap-2">
-                <span className="h-1.5 w-1.5 rounded-full bg-info" />
-                Received <span className="text-foreground">4,204</span>
-              </span>
-            </div>
-            <span className="hidden font-mono text-[9px] text-muted-foreground sm:inline">UTC</span>
-          </div>
-        </section>
-        <section className="min-w-0 border-t border-border py-6 lg:border-t-0 lg:pl-7">
-          <div className="flex items-center justify-between">
-            <div>
-              <h2 className="section-heading">Connected infrastructure</h2>
-              <p className="mt-1 text-[11px] text-muted-foreground">
-                Many parts. One seamless system.
-              </p>
-            </div>
-            <ViewLink to="/monitoring" label="Explore" />
-          </div>
-          <InfrastructureMap />
-          <div className="flex justify-between border-t border-border pt-3 font-mono text-[9px] text-muted-foreground">
-            {backend === "online" && dashboard ? (
-              <span>
-                {dashboard.servers.total} SERVERS <span className="mx-1 text-border">/</span>
-                {dashboard.domains.total} DOMAINS
-              </span>
-            ) : (
-              <span>
-                3 SERVERS <span className="mx-1 text-border">/</span> 8 DOMAINS
-              </span>
-            )}
-            <span className="flex items-center gap-1.5 text-primary">
-              <span className="live-dot" />
-              {backend === "online" ? "API CONNECTED" : "ENCRYPTED END-TO-END"}
-            </span>
-          </div>
-        </section>
-      </div>
-      <section className="py-6">
-        <div className="mb-5 flex items-center justify-between">
-          <div className="flex items-center gap-2.5">
-            <h2 className="section-heading">Your servers</h2>
-            <span className="font-mono text-[10px] text-muted-foreground">03</span>
-          </div>
-          <ViewLink to="/servers" label="Manage servers" />
-        </div>
-        <div className="no-scrollbar overflow-x-auto">
-          <table className="data-table">
-            <thead>
-              <tr>
-                {["SERVER / HOSTNAME", "REGION", "DOMAINS", "RESOURCE USAGE", "STATUS", ""].map(
-                  (h, i) => (
-                    <th key={i}>{h}</th>
-                  ),
-                )}
-              </tr>
-            </thead>
-            <tbody>
-              {(data["servers"] ?? []).map((s, i) => (
-                <tr key={s.id}>
-                  <td>
-                    <Link to="/servers" className="flex items-center gap-3 hover:text-primary">
-                      <span className="grid h-8 w-8 place-items-center rounded border border-border">
-                        <Server className="size-3.5 text-muted-foreground" />
-                      </span>
-                      <span>
-                        <span className="block text-[12px]">{s.name}</span>
-                        <span className="mt-1 block font-mono text-[10px] text-muted-foreground">
-                          {s["hostname"] ?? ""}
-                        </span>
-                      </span>
-                    </Link>
-                  </td>
-                  <td className="text-muted-foreground">{s["location"] ?? "—"}</td>
-                  <td>
-                    {s["domains"] ?? "—"}
-                    <span className="ml-1 text-muted-foreground">domains</span>
-                  </td>
-                  <td>
-                    <div className="flex items-center gap-2">
-                      <div className="resource-bar">
-                        <span className={i === 0 ? "w-1/4" : i === 1 ? "w-1/5" : "w-1/6"} />
-                      </div>
-                      <span className="font-mono text-[9px] text-muted-foreground">
-                        {(s["usage"] ?? "").split(" / ")[0]} CPU
-                      </span>
-                    </div>
-                  </td>
-                  <td>
-                    <Status value={s.status} />
-                  </td>
-                  <td>
-                    <Button
-                      asChild
-                      variant="ghost"
-                      size="icon"
-                      className="h-6 w-6"
-                      aria-label={`Inspect ${s.name}`}
-                    >
-                      <Link to="/servers">
-                        <ArrowUpRight className="size-3" />
-                      </Link>
-                    </Button>
-                  </td>
-                </tr>
-              ))}
-            </tbody>
-          </table>
-        </div>
-      </section>
-      <div className="grid gap-8 border-t border-border pt-6 lg:grid-cols-[1.2fr_1fr]">
-        <section className="min-w-0 lg:border-r lg:border-border lg:pr-7">
-          <div className="mb-2 flex items-center justify-between">
-            <h2 className="section-heading">Recent activity</h2>
-            <ViewLink to="/audit" />
-          </div>
-          {[
-            {
-              icon: ShieldCheck,
-              title: "TLS certificate renewed",
-              detail: "eu-central-01 · Auto-renewal completed",
-              time: "2 min ago",
-            },
-            {
-              icon: Inbox,
-              title: "New mailbox provisioned",
-              detail: "alex@acme.studio · Ready for conversations",
-              time: "18 min ago",
-            },
-            {
-              icon: Globe,
-              title: "Domain DNS verified",
-              detail: "northstar.dev · All records in place",
-              time: "42 min ago",
-            },
-          ].map((a) => (
-            <div
-              key={a.title}
-              className="activity-row grid grid-cols-[auto_minmax(0,1fr)_auto] items-center gap-3"
-            >
-              <a.icon className="size-3.5 text-muted-foreground" />
-              <div>
-                <div className="text-[11px]">{a.title}</div>
-                <div className="mt-1 text-[10px] text-muted-foreground">{a.detail}</div>
+      {summary.isPending && <p>Loading workspace�</p>}
+      {summary.isError && (
+        <p role="alert">Service unavailable. Workspace metrics could not be loaded.</p>
+      )}
+      {summary.data && (
+        <>
+          <div className="grid grid-cols-2 lg:grid-cols-4 border-y border-border py-6">
+            {[
+              ["Servers", summary.data.servers.total],
+              ["Domains", summary.data.domains.total],
+              ["Mailboxes", summary.data.mailboxes],
+              ["Aliases", summary.data.aliases],
+            ].map(([label, value]) => (
+              <div className="metric" key={label}>
+                <p className="eyebrow">{label}</p>
+                <p className="metric-number">{value}</p>
               </div>
-              <span className="font-mono text-[9px] text-muted-foreground">{a.time}</span>
-            </div>
+            ))}
+          </div>
+          <p>
+            {summary.data.servers.healthy} healthy servers � {summary.data.domains.verified}{" "}
+            verified domains
+          </p>
+          <h2 className="section-heading">Recent activity</h2>
+          {summary.data.recent.map((item) => (
+            <p key={item.id} className="activity-row">
+              {item.createdAt} � {item.actor || "System"} � {item.action} � {item.resource}
+            </p>
           ))}
-        </section>
-        <section>
-          <div className="mb-5 flex items-center justify-between">
-            <h2 className="section-heading">Needs your attention</h2>
-            <span className="font-mono text-[10px] text-warning">01 OPEN</span>
-          </div>
-          <div className="flex items-start gap-3">
-            <TriangleAlert className="mt-1 size-4 text-warning" />
-            <div>
-              <h3 className="text-[12px]">A small record. A big difference.</h3>
-              <p className="mt-2 max-w-80 text-[11px] leading-5 text-muted-foreground">
-                orbit.design is missing a DMARC record. Add it to protect your domain and improve
-                deliverability.
-              </p>
-              <Button
-                variant="ghost"
-                asChild
-                size="sm"
-                className="mt-3 h-7 px-0 text-[11px] text-primary"
-              >
-                <Link to="/dns">
-                  Review DNS configuration
-                  <ArrowRight className="size-3" />
-                </Link>
-              </Button>
-            </div>
-          </div>
-        </section>
+        </>
+      )}
+      <div className="flex gap-4">
+        <Button asChild>
+          <Link to="/servers">Manage servers</Link>
+        </Button>
+        <Button asChild variant="outline">
+          <Link to="/domains">Manage domains</Link>
+        </Button>
       </div>
+      <p className="text-sm text-muted-foreground">
+        Delivery telemetry is unavailable until an external mail engine supplies measurements.
+      </p>
     </div>
   );
 }

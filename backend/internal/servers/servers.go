@@ -20,6 +20,7 @@ import (
 
 // Server is the API representation of a managed mail server.
 type Server struct {
+	DomainCount    int    `json:"domainCount"`
 	ID             string `json:"id"`
 	Name           string `json:"name"`
 	Hostname       string `json:"hostname"`
@@ -38,7 +39,7 @@ const selectColumns = `id::text, name, hostname,
 	COALESCE(host(ipv4),''), COALESCE(host(ipv6),''), location, environment, notes,
 	status, maintenance,
 	COALESCE(to_char(last_check_at AT TIME ZONE 'UTC','YYYY-MM-DD"T"HH24:MI:SS"Z"'),''),
-	last_check_error`
+	last_check_error,(SELECT COUNT(*) FROM domains WHERE server_id=servers.id AND deleted_at IS NULL)`
 
 // Service implements server persistence and health checking.
 type Service struct {
@@ -55,7 +56,7 @@ func NewService(pool *pgxpool.Pool, auditRec *audit.Recorder, allowPrivate bool)
 func scanServer(row interface{ Scan(...any) error }) (*Server, error) {
 	var s Server
 	if err := row.Scan(&s.ID, &s.Name, &s.Hostname, &s.IPv4, &s.IPv6, &s.Location,
-		&s.Environment, &s.Notes, &s.Status, &s.Maintenance, &s.LastCheckAt, &s.LastCheckError); err != nil {
+		&s.Environment, &s.Notes, &s.Status, &s.Maintenance, &s.LastCheckAt, &s.LastCheckError, &s.DomainCount); err != nil {
 		return nil, err
 	}
 	return &s, nil

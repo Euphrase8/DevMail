@@ -22,6 +22,9 @@ import (
 
 // Domain is the API representation of a mail domain under management.
 type Domain struct {
+	MailboxCount      int     `json:"mailboxCount"`
+	AliasCount        int     `json:"aliasCount"`
+	ProviderName      string  `json:"providerName"`
 	ID                string  `json:"id"`
 	Name              string  `json:"name"`
 	ServerID          string  `json:"serverId"`
@@ -50,7 +53,10 @@ const domainColumns = `id::text, name,
 	COALESCE(server_id::text,''), status, verification_token,
 	COALESCE(to_char(verified_at AT TIME ZONE 'UTC','YYYY-MM-DD"T"HH24:MI:SS"Z"'),''),
 	catch_all, quota_bytes,
-	to_char(created_at AT TIME ZONE 'UTC','YYYY-MM-DD"T"HH24:MI:SS"Z"')`
+	to_char(created_at AT TIME ZONE 'UTC','YYYY-MM-DD"T"HH24:MI:SS"Z"'),
+ (SELECT COUNT(*) FROM mailboxes WHERE domain_id=domains.id AND deleted_at IS NULL),
+ (SELECT COUNT(*) FROM aliases WHERE domain_id=domains.id AND deleted_at IS NULL),
+ COALESCE((SELECT p.name FROM dns_records r JOIN dns_providers p ON p.id=r.provider_id WHERE r.domain_id=domains.id AND p.deleted_at IS NULL ORDER BY r.applied_at DESC NULLS LAST LIMIT 1),'')`
 
 // Enqueuer schedules an asynchronous provisioning job.
 type Enqueuer func(ctx context.Context, kind string, payload map[string]string) error
@@ -78,7 +84,7 @@ type rowScanner interface{ Scan(...any) error }
 func scanDomain(row rowScanner) (*Domain, error) {
 	var d Domain
 	if err := row.Scan(&d.ID, &d.Name, &d.ServerID, &d.Status, &d.VerificationToken,
-		&d.VerifiedAt, &d.CatchAll, &d.QuotaBytes, &d.CreatedAt); err != nil {
+		&d.VerifiedAt, &d.CatchAll, &d.QuotaBytes, &d.CreatedAt, &d.MailboxCount, &d.AliasCount, &d.ProviderName); err != nil {
 		return nil, err
 	}
 	if d.VerificationToken != "" {

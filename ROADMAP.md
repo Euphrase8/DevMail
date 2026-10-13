@@ -298,21 +298,21 @@ works; login events appear in `/audit`.
 
 ---
 
-### Phase 14 — Frontend wiring for all prior phases  `[ ]`
+### Phase 14 — Frontend wiring for all prior phases  `[x]`
 **Goal:** no screen may render fabricated data or run a sample mutation.
 **Tasks**
-- [ ] Extend `frontend/src/lib/api.ts` with every new endpoint (typed).
-- [ ] Replace `ResourcePage` sample rendering + in-memory `save`/`remove` for
+- [x] Extend `frontend/src/lib/api.ts` with every new endpoint (typed).
+- [x] Replace `ResourcePage` sample rendering + in-memory `save`/`remove` for
       **servers, domains, users** with real `create/update/delete` calls (endpoints
       already exist); wire `check`, `check-all`, `maintenance`, domain `verify`/`validate`.
-- [ ] Wire **mailboxes** and **aliases** to their domain-scoped endpoints
+- [x] Wire **mailboxes** and **aliases** to their domain-scoped endpoints
       (add a domain selector, or a new aggregate list endpoint — see [§ F](#f-contract-notes)).
-- [ ] Wire **settings** load/save to `GET|PATCH /settings`.
-- [ ] Wire **audit** `action` filter + pagination UI.
-- [ ] Replace fixture data in `routing`, `backups`, `notifications`, and the
+- [x] Wire **settings** load/save to `GET|PATCH /settings`.
+- [x] Wire **audit** `action` filter + pagination UI.
+- [x] Replace fixture data in `routing`, `backups`, `notifications`, and the
       monitoring metric tiles with real API reads (depends on Phase 12).
-- [ ] MFA + password + session screens (depends on Phase 13).
-- [ ] `npx tsc --noEmit` + `npm test` clean; verify each screen live.
+- [x] MFA + password + session screens (depends on Phase 13).
+- [x] `npx tsc --noEmit` + `npm test` clean; verify each screen live.
 
 ---
 
@@ -359,3 +359,5 @@ works; login events appear in `/audit`.
 | 2026-10-13 | 12 | Modular routing rules, pg_dump database backups with checksum/run history, encrypted SSRF-safe webhook notifications and live screens | PostgreSQL HTTP integration PASS; real pg_dump archive test PASS; webhook delivery/network/redirect tests PASS; full Go tests/vet PASS; frontend lint 0 errors, 18/18 tests, typecheck PASS | phase-12 commit |
 
 | 2026-10-13 | 13 | Signed session-bound CSRF, secure production cookies, TOTP encrypted enrollment + one-use recovery/replay protection, persistent lockout/rate limit, password/session APIs, security UI and login MFA, auth events and server role enforcement | PostgreSQL HTTP integration PASS: missing CSRF 403, operator writes/users 403, MFA/recovery replay, rotation, password revocation, persistent lockout, auth audit; full Go tests/vet PASS; frontend 18/18, lint 0 errors and typecheck PASS | phase-13 commit |
+
+| 2026-10-13 | 14 | All resource writes live; settings validation/atomic save; audit filter/pages/export; real aggregates and identity; removed fixture resources/metrics; corrected login cache race and Windows output watcher | PostgreSQL HTTP checks PASS; browser login + server/domain creation persisted; every remaining route rendered against API; Go tests/vet PASS; frontend 20/20, lint 0 errors, typecheck/build PASS | phase-14 commit |

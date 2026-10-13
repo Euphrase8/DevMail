@@ -1,10 +1,3 @@
 import { createFileRoute } from "@tanstack/react-router";
-import { ResourcePage } from "@/components/mail/resources/resource-page";
-import { modules, routeMeta } from "@/lib/mail/data";
-export const Route = createFileRoute("/audit")({
-  head: () => routeMeta(modules["audit"]!.title, modules["audit"]!.description),
-  component: Page,
-});
-function Page() {
-  return <ResourcePage section="audit" />;
-}
+import { AuditPage } from "@/components/mail/resources/audit-page";
+export const Route = createFileRoute("/audit")({ component: AuditPage });

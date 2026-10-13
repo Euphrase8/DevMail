@@ -96,6 +96,8 @@ export type User = {
   name: string;
   role: string;
   isActive: boolean;
+  mfaEnabled?: boolean;
+  lastLoginAt?: string;
   createdAt: string;
 };
 
@@ -110,6 +112,7 @@ export type Server = {
   notes: string;
   status: string;
   maintenance: boolean;
+  domainCount?: number;
   lastCheckAt: string;
   lastCheckError: string;
 };
@@ -125,6 +128,9 @@ export type Domain = {
   verificationName: string;
   verifiedAt: string;
   catchAll: boolean;
+  mailboxCount?: number;
+  aliasCount?: number;
+  providerName?: string;
   quotaBytes: number;
   createdAt: string;
   checkResults?: DomainCheck[];
@@ -396,6 +402,10 @@ export const api = {
     const suffix = q.size > 0 ? `?${q.toString()}` : "";
     return request<AuditEntry[]>(`/audit${suffix}`);
   },
+  auditPage: (action = "", page = 1, perPage = 25) =>
+    requestFull<{ data: AuditEntry[]; meta: { page: number; perPage: number; total: number } }>(
+      `/audit?${new URLSearchParams({ action, page: String(page), perPage: String(perPage) })}`,
+    ),
   listJobs: () => request<Job[]>("/jobs"),
   enqueueJob: (payload: { kind: string; payload?: unknown }) =>
     request<Job>("/jobs", { method: "POST", body: JSON.stringify(payload) }),

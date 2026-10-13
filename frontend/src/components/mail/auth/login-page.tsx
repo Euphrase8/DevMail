@@ -81,9 +81,12 @@ export function LoginPage() {
     try {
       if (mode === "bootstrap") {
         await api.setup({ email, name, password });
-        await api.login({ email, password });
+        queryClient.setQueryData(["session"], await api.login({ email, password }));
       } else {
-        await api.login({ email, password, code: String(fd.get("code") ?? "") });
+        queryClient.setQueryData(
+          ["session"],
+          await api.login({ email, password, code: String(fd.get("code") ?? "") }),
+        );
       }
       queryClient.invalidateQueries({ queryKey: ["session"] });
       queryClient.invalidateQueries({ queryKey: ["health"] });
@@ -324,7 +327,7 @@ export function LoginPage() {
 
         <div className="relative z-10 flex flex-wrap gap-2">
           <span className="rounded-full border border-white/15 bg-white/5 px-3 py-1.5 font-mono text-[10px] tracking-wide">
-            3 SERVERS / 8 DOMAINS
+            SELF-HOSTED MAIL MANAGEMENT
           </span>
           <span className="rounded-full border border-[oklch(0.68_0.17_33)]/40 bg-[oklch(0.68_0.17_33)]/10 px-3 py-1.5 font-mono text-[10px] tracking-wide text-[oklch(0.8_0.11_35)]">
             ENCRYPTED

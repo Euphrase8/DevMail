@@ -2,7 +2,9 @@ param([string]$Base = 'http://127.0.0.1:17001/api/v1')
 $ErrorActionPreference = 'Stop'
 $session = New-Object Microsoft.PowerShell.Commands.WebRequestSession
 function Call-Api([string]$Method, [string]$Path, $Body = $null) {
- $params = @{ Method=$Method; Uri="$Base$Path"; WebSession=$session; ContentType='application/json' }
+ $headers = @{}
+ if ($Method -notin @('GET','HEAD')) { $csrf = Invoke-RestMethod -Uri "$Base/auth/csrf" -WebSession $session; $headers['X-CSRF-Token'] = $csrf.data.token }
+ $params = @{ Headers=$headers; Method=$Method; Uri="$Base$Path"; WebSession=$session; ContentType='application/json' }
  if ($null -ne $Body) { $params.Body = ($Body | ConvertTo-Json -Depth 10 -Compress) }
  return (Invoke-RestMethod @params).data
 }

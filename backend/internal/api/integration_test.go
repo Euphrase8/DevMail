@@ -88,6 +88,13 @@ func TestProvisioningIntegration(t *testing.T) {
 	credentials := `{"email":"admin@example.test","name":"Admin","password":"Strong-test-password-123"}`
 	call("POST", "/auth/setup", credentials, 201)
 	call("POST", "/auth/login", credentials, 200)
+	call("PATCH", "/settings", `{"name":"Verified workspace","timezone":"UTC","webmail":"https://webmail.example.test","mailEngine":"sql","defaultQuotaBytes":2048}`, 200)
+	call("PATCH", "/settings", `{"provisioning_enabled":false}`, 422)
+	srv := call("POST", "/servers", `{"name":"Local blocked server","hostname":"localhost","ipv4":"127.0.0.1","environment":"development"}`, 201)["id"].(string)
+	call("POST", "/servers/"+srv+"/maintenance", `{"enabled":true}`, 200)
+	call("POST", "/servers/"+srv+"/check", "", 200)
+	call("PATCH", "/servers/"+srv, `{"name":"Updated server","hostname":"localhost","ipv4":"127.0.0.1","environment":"development"}`, 200)
+	call("DELETE", "/servers/"+srv, "", 200)
 	rule := call("POST", "/routing-rules", `{"name":"Forward","enabled":true,"config":{"source":"a@example.test","destination":"b@example.test"}}`, 201)["id"].(string)
 	call("PATCH", "/routing-rules/"+rule, `{"name":"Updated","enabled":false,"config":{"source":"a@example.test","destination":"c@example.test"}}`, 200)
 	call("DELETE", "/routing-rules/"+rule, "", 200)

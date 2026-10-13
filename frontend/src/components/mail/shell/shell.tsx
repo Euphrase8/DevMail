@@ -37,7 +37,7 @@ export function Logo() {
 
 export function MailShell({ children }: { children: ReactNode }) {
   const { pathname } = useLocation();
-  const { notice, notify, data, backend, signOut, session } = useMail();
+  const { notice, notify, data, backend, signOut, session, settings } = useMail();
   const [mobile, setMobile] = useState(false);
   const [searchOpen, setSearchOpen] = useState(false);
   const [query, setQuery] = useState("");
@@ -93,14 +93,14 @@ export function MailShell({ children }: { children: ReactNode }) {
             <span className="grid h-5 w-5 place-items-center rounded-sm border border-border text-[10px]">
               A
             </span>
-            Acme workspace
+            {settings["name"] || "DevMail"}
             <ChevronsUpDown className="size-3" />
           </Button>
         </div>
         <div className="flex shrink-0 items-center gap-1.5 md:gap-2">
           <span className="mr-1 hidden items-center gap-2 font-mono text-[10px] text-muted-foreground lg:flex">
             <span className="live-dot" />
-            {backend === "online" ? "API connected" : "Sample data"}
+            {backend === "online" ? "API connected" : "Not connected"}
           </span>
           <Button
             aria-label="Toggle color theme"
@@ -129,7 +129,6 @@ export function MailShell({ children }: { children: ReactNode }) {
             className="relative"
           >
             <Bell className="size-4" />
-            <span className="absolute right-2 top-2 h-1 w-1 rounded-full bg-warning" />
           </Button>
           <div className="h-5 border-l border-border" />
           <Button
@@ -140,7 +139,7 @@ export function MailShell({ children }: { children: ReactNode }) {
             onClick={() => setPanel(panel === "account" ? "" : "account")}
           >
             <span className="grid h-7 w-7 place-items-center rounded-full bg-secondary font-mono text-[10px]">
-              AM
+              {session?.name?.slice(0, 2).toUpperCase() || "�"}
             </span>
             <ChevronDown className="size-3 text-muted-foreground" />
           </Button>
@@ -178,7 +177,7 @@ export function MailShell({ children }: { children: ReactNode }) {
                       ? (data["servers"] ?? []).length
                       : n.path === "/domains"
                         ? (data["domains"] ?? []).length
-                        : n.count}
+                        : ""}
                   </span>
                 )}
               </Link>
@@ -210,7 +209,8 @@ export function MailShell({ children }: { children: ReactNode }) {
         <footer className="mt-10 flex flex-wrap items-center justify-between gap-3 border-t border-border pt-5 font-mono text-[9px] text-muted-foreground">
           <span>YOUR MAIL. YOUR INFRASTRUCTURE.</span>
           <span>
-            FRONTEND PREVIEW <span className="mx-2">/</span> UTC
+            {backend === "online" ? "API CONNECTED" : "NOT CONNECTED"}{" "}
+            <span className="mx-2">/</span> UTC
           </span>
         </footer>
       </main>
@@ -291,7 +291,7 @@ export function MailShell({ children }: { children: ReactNode }) {
               : panel === "account"
                 ? "Your account"
                 : panel === "workspace"
-                  ? "Acme workspace"
+                  ? settings["name"] || "DevMail"
                   : "Help & documentation"}
           </DialogTitle>
           <DialogDescription>
@@ -303,14 +303,9 @@ export function MailShell({ children }: { children: ReactNode }) {
           </DialogDescription>
           {panel === "notifications" ? (
             <>
-              <div className="activity-row text-sm text-warning">
-                DMARC record missing
-                <p className="mt-2 text-xs text-muted-foreground">orbit.design · 12 minutes ago</p>
-              </div>
-              <div className="activity-row text-sm">
-                TLS certificate renewed
-                <p className="mt-2 text-xs text-muted-foreground">eu-central-01 · 2 hours ago</p>
-              </div>
+              <p className="text-sm">
+                Review delivery events in Notifications and health checks in Monitoring.
+              </p>
               <Button asChild>
                 <Link to="/monitoring">Open monitoring</Link>
               </Button>
@@ -318,9 +313,9 @@ export function MailShell({ children }: { children: ReactNode }) {
           ) : panel === "account" ? (
             <>
               <p className="text-sm">
-                {session ? session.name || session.email : "Alex Morgan"}
+                {session ? session.name || session.email : "Not signed in"}
                 <span className="text-muted-foreground">
-                  · {session ? session.role.replace(/_/g, " ") : "Super Administrator"}
+                  · {session ? session.role.replace(/_/g, " ") : "No session"}
                 </span>
               </p>
               <Button variant="outline" asChild>

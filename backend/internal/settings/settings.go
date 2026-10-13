@@ -5,6 +5,8 @@ package settings
 import (
 	"context"
 	"encoding/json"
+	"net/url"
+	"strings"
 	"time"
 
 	"github.com/Euphrase8/DevMail/backend/internal/httpapi"
@@ -35,6 +37,9 @@ func (s *Service) All(ctx context.Context) (map[string]any, error) {
 		var raw []byte
 		if err := rows.Scan(&key, &raw); err != nil {
 			return nil, err
+		}
+		if key == "provisioning_enabled" {
+			continue
 		}
 		var v any
 		if err := json.Unmarshal(raw, &v); err != nil {
@@ -97,10 +102,50 @@ func (h *Handler) Update(c *gin.Context) {
 	ctx, cancel := context.WithTimeout(c.Request.Context(), 5*time.Second)
 	defer cancel()
 	for key, value := range req {
-		if err := h.svc.Set(ctx, key, value); err != nil {
+		valid := false
+		switch key {
+		case "name":
+			v, ok := value.(string)
+			valid = ok && len(strings.TrimSpace(v)) > 0 && len(v) <= 100
+		case "timezone":
+			v, ok := value.(string)
+			if ok {
+				_, err := time.LoadLocation(v)
+				valid = err == nil
+			}
+		case "mailEngine":
+			valid = value == "none" || value == "sql"
+		case "defaultQuotaBytes":
+			v, ok := value.(float64)
+			valid = ok && v >= 0 && v <= 109951162777600 && v == float64(int64(v))
+		case "webmail":
+			v, ok := value.(string)
+			if ok {
+				u, err := url.Parse(v)
+				valid = v == "" || (err == nil && (u.Scheme == "https" || u.Scheme == "http") && u.Host != "" && u.User == nil)
+			}
+		}
+		if !valid {
+			httpapi.FailFields(c, "Invalid setting.", map[string]any{key: "Unsupported key or invalid value"})
+			return
+		}
+	}
+	tx, err := h.svc.pool.Begin(ctx)
+	if err != nil {
+		httpapi.InternalError(c)
+		return
+	}
+	defer tx.Rollback(ctx)
+	for key, value := range req {
+		raw, _ := json.Marshal(value)
+		if _, err := tx.Exec(ctx, `INSERT INTO settings(key,value,updated_at) VALUES($1,$2,now()) ON CONFLICT(key) DO UPDATE SET value=EXCLUDED.value,updated_at=now()`, key, raw); err != nil {
 			httpapi.InternalError(c)
 			return
 		}
+	}
+	if err = tx.Commit(ctx); err != nil {
+		httpapi.InternalError(c)
+		return
 	}
 	all, err := h.svc.All(ctx)
 	if err != nil {

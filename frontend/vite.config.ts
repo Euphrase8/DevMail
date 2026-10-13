@@ -51,6 +51,7 @@ export default defineConfig(async ({ command }) => {
     },
     plugins,
     server: {
+      watch: { ignored: ["**/.output/**", "**/.wrangler/**", "**/dist/**", "**/.nitro/**"] },
       host: "::",
       port: 8080,
       proxy: {

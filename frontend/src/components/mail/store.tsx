@@ -1,6 +1,6 @@
 import { createContext, useContext, useEffect, useState, type ReactNode } from "react";
 import { useQuery, useQueryClient } from "@tanstack/react-query";
-import { initialData, type MailRecord } from "@/lib/mail/data";
+import { type MailRecord } from "@/lib/mail/data";
 import { api } from "@/lib/api";
 import type { AuditEntry, DashboardSummary, Domain, Job, Server, User } from "@/lib/api";
 
@@ -51,8 +51,8 @@ function serverToRecord(s: Server): MailRecord {
     location: s.location,
     environment: s.environment,
     ip: s.ipv4 || s.ipv6,
-    domains: "0",
-    usage: "Live / check",
+    domains: String(s.domainCount ?? 0),
+    usage: "Unavailable",
   };
 }
 
@@ -62,11 +62,12 @@ function domainToRecord(d: Domain): MailRecord {
     name: d.name,
     status: mapItemStatus(d.status),
     server: d.serverId ? "Assigned" : "Unassigned",
-    provider: "manual",
-    mailboxes: "0",
+    provider: d.providerName || "Unassigned",
+    mailboxes: String(d.mailboxCount ?? 0),
     storage: d.quotaBytes ? formatBytes(d.quotaBytes) : "Unlimited",
     dns: `${d.checkResults?.filter((c) => c.ok).length ?? 0} / ${d.checkResults?.length ?? 0} verified`,
     quota: String(d.quotaBytes),
+    serverId: d.serverId,
     catchall: d.catchAll ? "true" : "false",
   };
 }
@@ -128,16 +129,9 @@ function upsertSection(
 }
 
 export function MailProvider({ children }: { children: ReactNode }) {
-  const [data, setData] = useState<Record<string, MailRecord[]>>(initialData);
+  const [data, setData] = useState<Record<string, MailRecord[]>>({});
   const [notice, notify] = useState("");
-  const [settings, setSettings] = useState<Record<string, string>>({
-    name: "Acme workspace",
-    timezone: "UTC",
-    engine: "Mailcow",
-    retention: "90",
-    notifications: "On",
-    mfa: "Off",
-  });
+  const [settings, setSettings] = useState<Record<string, string>>({ name: "DevMail" });
   const queryClient = useQueryClient();
 
   const health = useQuery({
@@ -175,6 +169,40 @@ export function MailProvider({ children }: { children: ReactNode }) {
     staleTime: 60_000,
   });
 
+  const liveSettings = useQuery({ queryKey: ["settings"], queryFn: api.getSettings, retry: false });
+  const liveMailboxes = useQuery({
+    queryKey: ["all-mailboxes", domains.data?.map((d) => d.id).join(",")],
+    queryFn: async () => {
+      const lists = await Promise.all((domains.data ?? []).map((d) => api.listMailboxes(d.id)));
+      return lists.flat();
+    },
+    enabled: !!domains.data,
+  });
+  useEffect(() => {
+    if (!liveSettings.data) return;
+    const workspace = liveSettings.data["workspace"] as { name?: string } | undefined;
+    setSettings(
+      Object.fromEntries(
+        Object.entries({
+          ...liveSettings.data,
+          name: liveSettings.data["name"] ?? workspace?.name ?? "DevMail",
+        })
+          .filter(([, value]) => typeof value === "string")
+          .map(([key, value]) => [key, String(value)]),
+      ),
+    );
+  }, [liveSettings.data]);
+  useEffect(() => {
+    setData((old) => ({
+      ...old,
+      mailboxes: (liveMailboxes.data ?? []).map((m) => ({
+        id: m.id,
+        name: m.address,
+        status: mapItemStatus(m.status),
+        engineStatus: m.engineStatus,
+      })),
+    }));
+  }, [liveMailboxes.data]);
   const online = backend === "online";
 
   useEffect(() => {
@@ -201,11 +229,6 @@ export function MailProvider({ children }: { children: ReactNode }) {
     if (!online || !audit.data) return;
     setData((old) => upsertSection(old, "audit", audit.data!.map(auditToRecord)));
   }, [online, audit.data]);
-
-  useEffect(() => {
-    if (!online || !dashboard.data) return;
-    setSettings((old) => ({ ...old, name: "Managed mail workspace" }));
-  }, [online, dashboard.data]);
 
   const save = (section: string, item: MailRecord) =>
     setData((old) => ({
