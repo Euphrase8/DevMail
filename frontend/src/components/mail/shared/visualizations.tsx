@@ -122,11 +122,7 @@ export function InfrastructureMap() {
         <line x1="225" y1="139" x2="323" y2="202" className="orbit-line" />
         <line x1="225" y1="139" x2="133" y2="218" className="orbit-line" />
         <line x1="225" y1="139" x2="74" y2="133" className="orbit-line" />
-        <circle cx="225" cy="139" r="27" className="orbit-center" />
-        <path
-          d="M211 133 L225 125 L239 133 L225 141 Z M211 139 L225 147 L239 139 M211 145 L225 153 L239 145"
-          className="chart-line"
-        />
+        <image href="/brand/devmail-mark.svg" x="200" y="120.5" width="50" height="37" />
       </svg>
       {[
         { name: "Domains", icon: Globe, pos: "left-[43%] top-[12%]", path: "/domains" },

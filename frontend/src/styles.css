@@ -416,24 +416,11 @@ svg {
 .orbit-particle {
   fill: var(--primary);
 }
-.orbit-center {
-  fill: var(--subtle);
-  stroke: var(--border);
-}
 .topology {
   background-image:
     linear-gradient(var(--border) 1px, transparent 1px),
     linear-gradient(90deg, var(--border) 1px, transparent 1px);
   background-size: 28px 28px;
-}
-/* Brand artwork (duotone trace tinted to the coral ramp). */
-.brand-art {
-  -webkit-mask-image: radial-gradient(130% 120% at 32% 42%, #000 0%, transparent 74%);
-  mask-image: radial-gradient(130% 120% at 32% 42%, #000 0%, transparent 74%);
-}
-.overview-art {
-  -webkit-mask-image: linear-gradient(118deg, transparent 34%, #000 78%);
-  mask-image: linear-gradient(118deg, transparent 34%, #000 78%);
 }
 .live-dot {
   width: 6px;

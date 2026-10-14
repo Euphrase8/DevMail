@@ -12,27 +12,10 @@ import {
 } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { ThemeToggle } from "@/components/theme-toggle";
+import { Logo } from "@/components/brand";
 import { Dialog, DialogContent, DialogTitle, DialogDescription } from "@/components/ui/dialog";
 import { navigation } from "@/lib/mail/data";
 import { useMail } from "../store";
-
-export function Logo() {
-  return (
-    <span className="flex items-center gap-2.5">
-      <span className="grid size-8 shrink-0 place-items-center overflow-hidden rounded-md border border-border bg-subtle">
-        <img
-          src="/brand/devmail-art-coral.svg"
-          alt=""
-          aria-hidden
-          className="h-full w-full scale-[2.6] object-cover"
-        />
-      </span>
-      <span className="text-[23px] font-medium">
-        devmail<span className="text-primary">.</span>
-      </span>
-    </span>
-  );
-}
 
 export function MailShell({ children }: { children: ReactNode }) {
   const { pathname } = useLocation();
@@ -64,8 +47,8 @@ export function MailShell({ children }: { children: ReactNode }) {
 
   return (
     <div className="min-h-screen bg-background">
-      <header className="app-header sticky top-0 z-40 grid grid-cols-[minmax(0,1fr)_auto] items-center border-b border-border bg-background/80 px-5 backdrop-blur-md md:px-6">
-        <div className="flex min-w-0 items-center gap-7">
+      <header className="app-header sticky top-0 z-40 grid grid-cols-[minmax(0,1fr)_auto] items-center border-b border-border bg-background/80 px-3 backdrop-blur-md sm:px-5 md:px-6">
+        <div className="flex min-w-0 items-center gap-2 sm:gap-7">
           <Button
             size="icon"
             variant="ghost"
@@ -75,7 +58,7 @@ export function MailShell({ children }: { children: ReactNode }) {
           >
             <Menu />
           </Button>
-          <Link to="/" aria-label="DevMail overview">
+          <Link to="/" aria-label="DevMail overview" className="inline-flex shrink-0">
             <Logo />
           </Link>
           <div className="hidden h-5 border-l border-border md:block" />

@@ -14,7 +14,7 @@ import {
 } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { ThemeToggle } from "@/components/theme-toggle";
-import { Logo } from "../shell/shell";
+import { BrandMark, Logo } from "@/components/brand";
 import { api, ApiError } from "@/lib/api";
 
 type Mode = "login" | "bootstrap" | "mfa" | "reset";
@@ -120,15 +120,15 @@ export function LoginPage() {
     <div className="grid min-h-screen bg-background lg:grid-cols-2">
       <div className="flex flex-col">
         <header className="flex h-20 items-center justify-between px-6 md:px-10">
-          <Link to="/" aria-label="DevMail overview">
+          <Link to="/" aria-label="DevMail overview" className="inline-flex shrink-0">
             <Logo />
           </Link>
           <div className="flex items-center gap-1.5">
             <ThemeToggle />
             <Button variant="ghost" size="sm" asChild>
-              <Link to="/">
+              <Link to="/" aria-label="Return to workspace">
                 <ChevronLeft />
-                Return to workspace
+                <span className="hidden sm:inline">Return to workspace</span>
               </Link>
             </Button>
           </div>
@@ -249,12 +249,6 @@ export function LoginPage() {
 
       <aside className="relative hidden overflow-hidden border-l border-border bg-[oklch(0.155_0_0)] p-12 text-[oklch(0.97_0_0)] lg:flex lg:flex-col">
         <div aria-hidden className="topology pointer-events-none absolute inset-0 opacity-10" />
-        <img
-          src="/brand/devmail-art-coral.svg"
-          alt=""
-          aria-hidden
-          className="brand-art pointer-events-none absolute inset-0 h-full w-full object-cover opacity-25 mix-blend-screen"
-        />
         <div
           aria-hidden
           className="pointer-events-none absolute left-1/2 top-1/2 h-[70%] w-[70%] -translate-x-1/2 -translate-y-1/2 rounded-full bg-[oklch(0.68_0.17_33)] opacity-[0.12] blur-3xl"
@@ -312,21 +306,8 @@ export function LoginPage() {
               ))}
             </svg>
 
-            <div className="absolute left-1/2 top-1/2 grid h-14 w-14 -translate-x-1/2 -translate-y-1/2 place-items-center rounded-full border border-white/15 bg-white/5 backdrop-blur">
-              <svg
-                width="22"
-                height="24"
-                viewBox="0 0 25 27"
-                aria-hidden
-                className="text-[oklch(0.7_0.17_33)]"
-              >
-                <path
-                  d="M2 7 12.5 1 23 7 12.5 13ZM2 13 12.5 19 23 13M2 19 12.5 25 23 19"
-                  stroke="currentColor"
-                  strokeWidth="2"
-                  fill="none"
-                />
-              </svg>
+            <div className="absolute left-1/2 top-1/2 -translate-x-1/2 -translate-y-1/2">
+              <BrandMark />
             </div>
 
             {nodes.map(({ label, icon: Icon, x, y }) => (

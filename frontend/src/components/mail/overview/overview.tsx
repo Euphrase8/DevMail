@@ -80,13 +80,7 @@ export function Overview() {
     },
   ];
   return (
-    <div className="page-enter relative isolate">
-      <img
-        src="/brand/devmail-art-coral.svg"
-        alt=""
-        aria-hidden
-        className="overview-art pointer-events-none absolute right-0 top-0 -z-10 hidden h-[420px] w-auto opacity-[0.13] dark:opacity-[0.22] lg:block"
-      />
+    <div className="page-enter">
       <div className="grid grid-cols-[minmax(0,1fr)_auto] items-start gap-4">
         <div className="min-w-0">
           <div className="eyebrow mb-3 flex items-center gap-2">
