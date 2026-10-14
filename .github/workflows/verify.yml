@@ -1,5 +1,9 @@
 name: Verify DevMail
-on: [push, pull_request]
+# Heavy checks gate pull requests; pushes to main go straight to the fast
+# deploy workflow (.github/workflows/deploy.yml) instead of re-running these.
+on:
+  pull_request:
+  workflow_dispatch:
 permissions:
   contents: read
 jobs:
