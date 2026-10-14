@@ -310,29 +310,8 @@ export function MailProvider({ children }: { children: ReactNode }) {
   const backend: Store["backend"] =
     health.isPending && !health.error ? "checking" : health.error ? "offline" : "online";
 
-  const servers = useQuery({ queryKey: ["servers"], queryFn: api.listServers, retry: false });
-  const domains = useQuery({ queryKey: ["domains"], queryFn: api.listDomains, retry: false });
-  const users = useQuery({ queryKey: ["users"], queryFn: api.listUsers, retry: false });
-  const jobs = useQuery({ queryKey: ["jobs"], queryFn: api.listJobs, retry: false });
-  const audit = useQuery({ queryKey: ["audit"], queryFn: () => api.listAudit(), retry: false });
-  const providers = useQuery({ queryKey: ["providers"], queryFn: api.listProviders, retry: false });
-  const routing = useQuery({
-    queryKey: ["ops", "routing-rules"],
-    queryFn: () => api.listOps("routing-rules"),
-    retry: false,
-  });
-  const backups = useQuery({
-    queryKey: ["ops", "backups"],
-    queryFn: () => api.listOps("backups"),
-    retry: false,
-  });
-  const dashboard = useQuery({
-    queryKey: ["dashboard"],
-    queryFn: api.dashboard,
-    retry: false,
-    refetchInterval: 60_000,
-  });
-
+  // The session check runs first: protected resources are only fetched once we
+  // know a session exists, so an anonymous visit never fires a burst of 401s.
   const session = useQuery({
     queryKey: ["session"],
     queryFn: async () => {
@@ -345,8 +324,70 @@ export function MailProvider({ children }: { children: ReactNode }) {
     retry: false,
     staleTime: 60_000,
   });
+  const authenticated = !!session.data;
 
-  const liveSettings = useQuery({ queryKey: ["settings"], queryFn: api.getSettings, retry: false });
+  const servers = useQuery({
+    queryKey: ["servers"],
+    queryFn: api.listServers,
+    retry: false,
+    enabled: authenticated,
+  });
+  const domains = useQuery({
+    queryKey: ["domains"],
+    queryFn: api.listDomains,
+    retry: false,
+    enabled: authenticated,
+  });
+  const users = useQuery({
+    queryKey: ["users"],
+    queryFn: api.listUsers,
+    retry: false,
+    enabled: authenticated,
+  });
+  const jobs = useQuery({
+    queryKey: ["jobs"],
+    queryFn: api.listJobs,
+    retry: false,
+    enabled: authenticated,
+  });
+  const audit = useQuery({
+    queryKey: ["audit"],
+    queryFn: () => api.listAudit(),
+    retry: false,
+    enabled: authenticated,
+  });
+  const providers = useQuery({
+    queryKey: ["providers"],
+    queryFn: api.listProviders,
+    retry: false,
+    enabled: authenticated,
+  });
+  const routing = useQuery({
+    queryKey: ["ops", "routing-rules"],
+    queryFn: () => api.listOps("routing-rules"),
+    retry: false,
+    enabled: authenticated,
+  });
+  const backups = useQuery({
+    queryKey: ["ops", "backups"],
+    queryFn: () => api.listOps("backups"),
+    retry: false,
+    enabled: authenticated,
+  });
+  const dashboard = useQuery({
+    queryKey: ["dashboard"],
+    queryFn: api.dashboard,
+    retry: false,
+    refetchInterval: 60_000,
+    enabled: authenticated,
+  });
+
+  const liveSettings = useQuery({
+    queryKey: ["settings"],
+    queryFn: api.getSettings,
+    retry: false,
+    enabled: authenticated,
+  });
 
   const domainIds = domains.data?.map((d) => d.id).join(",") ?? "";
   const liveMailboxes = useQuery({

@@ -15,15 +15,16 @@ import { useEffect, type ReactNode } from "react";
 import appCss from "../styles.css?url";
 import { initTheme } from "@/lib/theme";
 import { MailProvider, useMail } from "@/components/mail/store";
-import { MailShell } from "@/components/mail/shell/shell";
+import { MailShell, Logo } from "@/components/mail/shell/shell";
 
 // Applied before first paint so the stored theme is on <html> during hydration
 // (no flash of the wrong theme, no server/client markup mismatch).
 const THEME_BOOTSTRAP = `(function(){try{var k='devmail-theme';var t=localStorage.getItem(k);if(t!=='light'&&t!=='dark'){t=window.matchMedia('(prefers-color-scheme: dark)').matches?'dark':'light';}var e=document.documentElement;e.classList.toggle('dark',t==='dark');e.style.colorScheme=t;}catch(e){}})();`;
 
-// SessionGate redirects anonymous visitors to the login screen once we know
-// the API is reachable and has no session for this browser. When the backend
-// is unreachable the workspace stays visible in its honest fallback state.
+// SessionGate keeps anonymous visitors on the auth screen. Until the session is
+// known it shows a neutral splash instead of the workspace, so a signed-out
+// visit never flashes the dashboard before landing on sign-in. When the API is
+// unreachable the workspace renders its honest offline state.
 function SessionGate({ children }: { children: ReactNode }) {
   const { session, sessionKnown, backend } = useMail();
   const navigate = useNavigate();
@@ -34,7 +35,22 @@ function SessionGate({ children }: { children: ReactNode }) {
     }
   }, [backend, sessionKnown, session, navigate]);
 
+  const settled = backend === "offline" || (sessionKnown && !!session);
+  if (!settled) return <AuthSplash />;
   return <>{children}</>;
+}
+
+function AuthSplash() {
+  return (
+    <div className="flex min-h-screen items-center justify-center bg-background">
+      <div className="flex flex-col items-center gap-4">
+        <Logo />
+        <p className="font-mono text-[10px] uppercase tracking-wide text-muted-foreground">
+          Checking your session…
+        </p>
+      </div>
+    </div>
+  );
 }
 
 function NotFoundComponent() {
