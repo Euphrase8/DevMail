@@ -1,10 +1,12 @@
 # Production stack for a host that sits behind a shared edge proxy (Caddy).
-# Publishes no host ports: the proxy reaches these containers by name over the
-# external "taskpart" Docker network. Bring up from the repo root:
+# Publishes no host ports for the web tier: the proxy reaches those containers by
+# name over the external "taskpart" Docker network. The mail tier publishes the
+# standard SMTP/IMAP ports directly. Bring up from the repo root:
 #
 #   docker compose -f compose.vps.yml up -d --build
 #
-# Secrets come from .env in this directory (see .env.example).
+# Secrets come from .env in this directory (see .env.example). The mail tier
+# serves the managed domains from the shared DevMail database (engine_* tables).
 name: devmail
 
 services:
@@ -61,6 +63,91 @@ services:
     networks:
       - edge
 
+  # --- Mail delivery tier -----------------------------------------------------
+  # Inbound SMTP (25), authenticated submission (587/465) and IMAP over TLS
+  # (993). Postfix reads virtual domains/mailboxes/aliases from the engine_*
+  # tables, signs with OpenDKIM, and delivers to Dovecot over LMTP. TLS material
+  # is mounted from ./mail-tls (the Let's Encrypt certificate Caddy already
+  # holds for mail.<domain>).
+  postfix:
+    build:
+      context: ./deploy/mail/postfix
+    image: devmail-postfix:latest
+    container_name: devmail-postfix
+    restart: unless-stopped
+    hostname: ${MAIL_HOSTNAME:-mail.devhubinc.com}
+    environment:
+      MAIL_HOSTNAME: ${MAIL_HOSTNAME:-mail.devhubinc.com}
+      MAIL_DOMAIN: ${MAIL_DOMAIN:-devhubinc.com}
+      POSTGRES_HOST: db
+      POSTGRES_PORT: "5432"
+      POSTGRES_DB: devmail
+      POSTGRES_USER: postgres
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD}
+      MAIL_TLS_CERT_FILE: /etc/ssl/private/mail.pem
+      MAIL_TLS_KEY_FILE: /etc/ssl/private/mail.key
+    volumes:
+      - mail-sockets:/var/spool/postfix/private
+      - ./mail-tls:/etc/ssl/private
+    ports:
+      - "25:25"
+      - "587:587"
+      - "465:465"
+    depends_on:
+      db:
+        condition: service_healthy
+      opendkim:
+        condition: service_started
+    networks:
+      - internal
+
+  dovecot:
+    build:
+      context: ./deploy/mail/dovecot
+    image: devmail-dovecot:latest
+    container_name: devmail-dovecot
+    restart: unless-stopped
+    hostname: ${MAIL_HOSTNAME:-mail.devhubinc.com}
+    environment:
+      MAIL_HOSTNAME: ${MAIL_HOSTNAME:-mail.devhubinc.com}
+      POSTGRES_HOST: db
+      POSTGRES_PORT: "5432"
+      POSTGRES_DB: devmail
+      POSTGRES_USER: postgres
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD}
+      MAIL_TLS_CERT_FILE: /etc/ssl/private/mail.pem
+      MAIL_TLS_KEY_FILE: /etc/ssl/private/mail.key
+    volumes:
+      - mail-sockets:/var/spool/postfix/private
+      - ./mail-tls:/etc/ssl/private
+      - vmail:/var/mail/vmail
+    ports:
+      - "993:993"
+    depends_on:
+      db:
+        condition: service_healthy
+    networks:
+      - internal
+
+  opendkim:
+    build:
+      context: .
+      dockerfile: deploy/mail/opendkim/Dockerfile
+    image: devmail-opendkim:latest
+    container_name: devmail-opendkim
+    restart: unless-stopped
+    environment:
+      DATABASE_URL: postgres://postgres:${POSTGRES_PASSWORD}@db:5432/devmail?sslmode=disable
+      SECRET_KEY: ${SECRET_KEY}
+      DKIM_DIR: /etc/opendkim/keys
+    volumes:
+      - dkim-keys:/etc/opendkim/keys
+    depends_on:
+      db:
+        condition: service_healthy
+    networks:
+      - internal
+
 networks:
   internal:
   edge:
@@ -70,3 +157,6 @@ networks:
 volumes:
   db-data:
   backups:
+  mail-sockets:
+  vmail:
+  dkim-keys:

@@ -1,0 +1,14 @@
+# Keep the repo-root build context (used by the OpenDKIM image) small.
+.git
+.github
+**/node_modules
+frontend/.output
+frontend/.nitro
+frontend/dist
+frontend/dist-ssr
+backend/bin
+**/*.log
+.env
+.env.*
+!.env.example
+mail-tls
