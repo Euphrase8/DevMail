@@ -1,0 +1,24 @@
+# DevMail edge route. Append this block to the shared Caddyfile that fronts the
+# host (the file bind-mounted into the `taskpart-caddy` container), then reload:
+#
+#   docker exec taskpart-caddy caddy reload --config /etc/caddy/Caddyfile
+#
+# Caddy issues and renews TLS for mail.devhubinc.com automatically once DNS
+# points at the host. The stack joins the same `taskpart` network, so the
+# upstreams resolve by container name.
+
+mail.devhubinc.com {
+	encode zstd gzip
+
+	handle /api/* {
+		reverse_proxy devmail-api:7000
+	}
+
+	handle /metrics {
+		reverse_proxy devmail-api:7000
+	}
+
+	handle {
+		reverse_proxy devmail-web:3000
+	}
+}

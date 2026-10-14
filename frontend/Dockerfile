@@ -4,6 +4,8 @@ COPY package.json package-lock.json ./
 RUN npm ci
 COPY . .
 ENV NITRO_PRESET=node-server
+ARG VITE_API_BASE=/api/v1
+ENV VITE_API_BASE=${VITE_API_BASE}
 RUN npm run build
 
 FROM node:24-bookworm-slim
