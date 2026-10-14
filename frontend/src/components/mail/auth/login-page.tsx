@@ -13,6 +13,7 @@ import {
   type LucideIcon,
 } from "lucide-react";
 import { Button } from "@/components/ui/button";
+import { ThemeToggle } from "@/components/theme-toggle";
 import { Logo } from "../shell/shell";
 import { api, ApiError } from "@/lib/api";
 
@@ -57,7 +58,10 @@ export function LoginPage() {
   });
 
   useEffect(() => {
-    if (status.data && !status.data.hasUsers) setMode("bootstrap");
+    if (!status.data) return;
+    // First-run only: bootstrap is offered solely while no administrator exists.
+    if (!status.data.hasUsers) setMode("bootstrap");
+    else setMode((m) => (m === "bootstrap" ? "login" : m));
   }, [status.data]);
 
   async function handleSubmit(e: FormEvent<HTMLFormElement>) {
@@ -92,6 +96,12 @@ export function LoginPage() {
       queryClient.invalidateQueries({ queryKey: ["health"] });
       navigate({ to: "/" });
     } catch (err) {
+      if (mode === "bootstrap" && err instanceof ApiError && err.status === 409) {
+        // An administrator already exists — bootstrap is closed. Return to sign-in.
+        setMode("login");
+        setMessage("An administrator already exists. Sign in with your administrator account.");
+        return;
+      }
       setError(
         err instanceof ApiError ? err.message : "Could not reach the API. Is the backend running?",
       );
@@ -113,12 +123,15 @@ export function LoginPage() {
           <Link to="/" aria-label="DevMail overview">
             <Logo />
           </Link>
-          <Button variant="ghost" size="sm" asChild>
-            <Link to="/">
-              <ChevronLeft />
-              Return to workspace
-            </Link>
-          </Button>
+          <div className="flex items-center gap-1.5">
+            <ThemeToggle />
+            <Button variant="ghost" size="sm" asChild>
+              <Link to="/">
+                <ChevronLeft />
+                Return to workspace
+              </Link>
+            </Button>
+          </div>
         </header>
 
         <main className="flex flex-1 items-center justify-center px-6 pb-16">
@@ -204,21 +217,23 @@ export function LoginPage() {
               )}
             </form>
 
-            <div className="mt-8 flex flex-wrap gap-2 border-t border-border pt-5">
-              {(["login", "bootstrap"] as Mode[])
-                .filter((m) => m !== mode)
-                .map((m) => (
-                  <Button
-                    key={m}
-                    variant="ghost"
-                    size="sm"
-                    onClick={() => switchMode(m)}
-                    className="px-0 text-xs text-muted-foreground"
-                  >
-                    {m === "login" ? "Sign in" : "Administrator setup"}
-                  </Button>
-                ))}
-            </div>
+            {!status.isLoading && status.data && !status.data.hasUsers && (
+              <div className="mt-8 flex flex-wrap gap-2 border-t border-border pt-5">
+                {(["login", "bootstrap"] as Mode[])
+                  .filter((m) => m !== mode)
+                  .map((m) => (
+                    <Button
+                      key={m}
+                      variant="ghost"
+                      size="sm"
+                      onClick={() => switchMode(m)}
+                      className="px-0 text-xs text-muted-foreground"
+                    >
+                      {m === "login" ? "Sign in" : "Administrator setup"}
+                    </Button>
+                  ))}
+              </div>
+            )}
 
             <p className="mt-8 flex gap-2 text-xs text-muted-foreground">
               <ShieldCheck className="size-4 text-primary" />
@@ -233,7 +248,13 @@ export function LoginPage() {
       </div>
 
       <aside className="relative hidden overflow-hidden border-l border-border bg-[oklch(0.155_0_0)] p-12 text-[oklch(0.97_0_0)] lg:flex lg:flex-col">
-        <div aria-hidden className="topology pointer-events-none absolute inset-0 opacity-20" />
+        <div aria-hidden className="topology pointer-events-none absolute inset-0 opacity-10" />
+        <img
+          src="/brand/devmail-art-coral.svg"
+          alt=""
+          aria-hidden
+          className="brand-art pointer-events-none absolute inset-0 h-full w-full object-cover opacity-25 mix-blend-screen"
+        />
         <div
           aria-hidden
           className="pointer-events-none absolute left-1/2 top-1/2 h-[70%] w-[70%] -translate-x-1/2 -translate-y-1/2 rounded-full bg-[oklch(0.68_0.17_33)] opacity-[0.12] blur-3xl"

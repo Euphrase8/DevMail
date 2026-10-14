@@ -47,9 +47,7 @@ export function NotificationsPage() {
     setSetting("notifications", email ? "On" : "Off");
     setSetting("alertEmail", alertEmail);
     setSetting("webhook", webhookUrl);
-    notify(
-      "Sample notification preferences saved for this session. Delivery requires a connected backend.",
-    );
+    notify("Notification preferences saved.");
   };
 
   return (
@@ -167,15 +165,15 @@ export function NotificationsPage() {
           </div>
           <p className="mt-4 flex items-start gap-2 text-[11px] leading-5 text-warning">
             <Mail className="mt-0.5 size-3.5 shrink-0" />
-            Nothing is delivered in this preview. Real notifications require the connecting backend
-            service.
+            Notification delivery isn't connected yet. Your preferences are saved and will take
+            effect once a delivery service is configured.
           </p>
         </section>
       </div>
 
       <div className="mt-8 flex items-center justify-between gap-4">
         <p className="text-[11px] text-muted-foreground">
-          Frontend preferences only · sensitive endpoints are never shared with the browser.
+          Preferences are stored by the DevMail backend.
         </p>
         <Button size="sm" onClick={save}>
           <Save />

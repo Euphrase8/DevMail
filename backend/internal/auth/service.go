@@ -20,6 +20,11 @@ const SessionLifetime = 24 * time.Hour
 // ErrNotFound is returned when a resource does not exist.
 var ErrNotFound = errors.New("not found")
 
+// ErrAccountLocked is returned when an account is temporarily locked after too
+// many failed sign-in attempts. It is surfaced distinctly from invalid
+// credentials so clients can tell the user to wait rather than re-typing.
+var ErrAccountLocked = errors.New("account temporarily locked")
+
 // User is the signed-in administrator identity attached to requests.
 type User struct {
 	ID          string `json:"id"`
@@ -109,7 +114,7 @@ func (s *Service) Login(ctx context.Context, email, password, ip, userAgent stri
 	var locked bool
 	_ = s.pool.QueryRow(ctx, `SELECT COALESCE(locked_until>now(),false) FROM auth_attempts WHERE key=$1`, accountKey).Scan(&locked)
 	if locked {
-		return nil, "", errors.New("invalid credentials")
+		return nil, "", ErrAccountLocked
 	}
 	var id, storedHash string
 	var active bool

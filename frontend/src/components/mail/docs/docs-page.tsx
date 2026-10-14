@@ -9,6 +9,7 @@ import {
   ListChecks,
   LockKeyhole,
   Network,
+  Rocket,
   Server,
   ShieldCheck,
   TriangleAlert,
@@ -23,8 +24,69 @@ const sections: {
   title: string;
   intro: string;
   body: string[];
+  steps?: { step: string; detail: string }[];
   links: { label: string; href: string }[];
 }[] = [
+  {
+    id: "getting-started",
+    icon: Rocket,
+    title: "Create mail for your domain",
+    intro: "From a bare domain to a working mailbox, in order.",
+    steps: [
+      {
+        step: "Register your mail server",
+        detail:
+          "Servers → Register server. Enter the mail hostname (mail.example.com), the server's public IPv4 address, and its location. DevMail records the host for monitoring and later provisioning.",
+      },
+      {
+        step: "Point DNS at the server",
+        detail:
+          "Create an A record mail.example.com → your server's IPv4. Ask your hosting provider to set the PTR (reverse DNS) for that IP to mail.example.com — only the provider can do this.",
+      },
+      {
+        step: "Add your domain",
+        detail:
+          "Domains → Add domain. Choose the mail server that will host it and set a mailbox limit and quota.",
+      },
+      {
+        step: "Verify ownership",
+        detail:
+          "Open the domain and copy the ownership challenge (_relay-verification.example.com = relay-verify=…). Add it as a TXT record at your DNS provider, then click Verify ownership.",
+      },
+      {
+        step: "Install the mail DNS records",
+        detail:
+          'On the DNS records screen add: MX → mail.example.com (priority 10), SPF TXT "v=spf1 mx -all", a DKIM TXT at dkim._domainkey, and a DMARC TXT at _dmarc. Re-run checks until each row shows Verified.',
+      },
+      {
+        step: "Create mailboxes",
+        detail:
+          "Mailboxes → Create mailbox. Provide the address, a display name, a password of at least 12 characters, and a quota. Provisioning runs as an audited job and reconciles with the mail engine.",
+      },
+      {
+        step: "Add aliases",
+        detail:
+          "Aliases → Create alias to forward shared addresses (support@, billing@) to one or more real mailboxes.",
+      },
+      {
+        step: "Configure your mail client",
+        detail:
+          "IMAP mail.example.com : 993 (TLS). SMTP mail.example.com : 587 (STARTTLS). Username is the full email address.",
+      },
+      {
+        step: "Verify delivery",
+        detail:
+          "Watch Monitoring and Provisioning jobs for health, queue depth, and delivery events. Send a test message and confirm SPF, DKIM, and DMARC align.",
+      },
+    ],
+    body: [
+      "Follow the steps below in order. Each one has a matching screen in the workspace, and nothing reports success until the external system confirms it.",
+    ],
+    links: [
+      { label: "SPF (RFC 7208)", href: "https://datatracker.ietf.org/doc/html/rfc7208" },
+      { label: "DMARC (RFC 7489)", href: "https://datatracker.ietf.org/doc/html/rfc7489" },
+    ],
+  },
   {
     id: "overview",
     icon: BookOpen,
@@ -132,7 +194,7 @@ const cards = [
   {
     icon: TriangleAlert,
     title: "Honest boundaries",
-    body: "This frontend preview is not connected to a mail engine, DNS provider, or authentication service. Nothing here verifies ownership, sends mail, or changes infrastructure.",
+    body: "This console talks to the live DevMail backend: it provisions mailboxes and aliases, verifies DNS and domain ownership, and reads infrastructure state. Some capabilities — hosted webmail, provider OAuth, and outbound delivery tuning — are external prerequisites and report their status honestly rather than faking results.",
   },
   {
     icon: FileKey2,
@@ -209,6 +271,26 @@ export function DocsPage() {
                         {p}
                       </p>
                     ))}
+                    {s.steps && (
+                      <ol className="mt-5 max-w-2xl border-y border-border">
+                        {s.steps.map((st, i) => (
+                          <li
+                            key={st.step}
+                            className="flex gap-4 border-b border-border py-4 last:border-b-0"
+                          >
+                            <span className="mt-0.5 grid size-6 shrink-0 place-items-center rounded-full border border-border bg-subtle font-mono text-[10px] text-primary">
+                              {String(i + 1).padStart(2, "0")}
+                            </span>
+                            <span className="min-w-0">
+                              <span className="block text-xs text-foreground">{st.step}</span>
+                              <span className="mt-1 block text-[11px] leading-5 text-muted-foreground">
+                                {st.detail}
+                              </span>
+                            </span>
+                          </li>
+                        ))}
+                      </ol>
+                    )}
                     {s.links.length > 0 && (
                       <div className="mt-5 flex flex-wrap gap-2">
                         {s.links.map((l) => (

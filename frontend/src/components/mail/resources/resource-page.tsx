@@ -2,7 +2,6 @@ import { useEffect, useState } from "react";
 import { useLocation } from "@tanstack/react-router";
 import {
   ArrowRight,
-  Check,
   Copy,
   Download,
   Eye,
@@ -23,11 +22,12 @@ import {
   SelectValue,
 } from "@/components/ui/select";
 import { Dialog, DialogContent, DialogDescription, DialogTitle } from "@/components/ui/dialog";
+import { api, ApiError } from "@/lib/api";
 import { modules, type MailRecord, type Section } from "@/lib/mail/data";
 import { useMail } from "../store";
 import { Status } from "../shared/visualizations";
 export function ResourcePage({ section }: { section: Section }) {
-  const { data, save, remove, notify } = useMail();
+  const { data, save, remove, refresh, notify, backend } = useMail();
   const config = modules[section]!;
   const rows = data[section] || [];
   const location = useLocation();
@@ -38,6 +38,8 @@ export function ResourcePage({ section }: { section: Section }) {
   const [deletion, setDeletion] = useState<MailRecord | null>(null);
   const [error, setError] = useState("");
   const [busy, setBusy] = useState(false);
+  const describe = (e: unknown) =>
+    e instanceof ApiError ? e.message : "The request failed. Try again.";
   const newRecord = () => {
     setError("");
     setEditor({
@@ -100,16 +102,35 @@ export function ResourcePage({ section }: { section: Section }) {
     delete safe["password"];
     save(section, safe);
     setEditor(null);
-    notify(
-      `Sample ${config.singular} saved for this session. No infrastructure changes were made.`,
-    );
+    notify(`${config.singular} saved.`);
   };
-  const simulateCheck = () => {
+  const runChecks = async () => {
     setBusy(true);
-    setTimeout(() => {
+    try {
+      if (section === "servers") {
+        await api.checkAllServers();
+      } else if (section === "domains" || section === "dns") {
+        for (const d of data["domains"] ?? []) await api.validateDomain(d.id);
+      }
+      refresh(section);
+      notify("Checks submitted. Results refresh shortly.");
+    } catch (e) {
+      notify(describe(e));
+    } finally {
       setBusy(false);
-      notify("Live verification is not connected. Current results are sample data.");
-    }, 650);
+    }
+  };
+  const verifyOwnership = async (id: string) => {
+    setBusy(true);
+    try {
+      await api.verifyDomain(id);
+      refresh("domains");
+      notify("Ownership verification submitted.");
+    } catch (e) {
+      notify(describe(e));
+    } finally {
+      setBusy(false);
+    }
   };
   const exportCsv = () => {
     const csv = [
@@ -121,10 +142,10 @@ export function ResourcePage({ section }: { section: Section }) {
     const url = URL.createObjectURL(new Blob([csv], { type: "text/csv" }));
     const link = document.createElement("a");
     link.href = url;
-    link.download = `relay-${section}.csv`;
+    link.download = `devmail-${section}.csv`;
     link.click();
     URL.revokeObjectURL(url);
-    notify("Sample records exported.");
+    notify(`Exported ${shown.length} ${config.title.toLowerCase()}.`);
   };
   const copy = async (value: string) => {
     try {
@@ -184,7 +205,7 @@ export function ResourcePage({ section }: { section: Section }) {
           <div>
             <p>Ownership, DNS readiness, provisioning, and delivery are separate checks.</p>
             <p className="mt-2 text-muted-foreground">
-              Sample records shown. No domain has been verified by this frontend.
+              Values are read live from the DevMail backend; nothing is assumed.
             </p>
           </div>
         </div>
@@ -214,8 +235,8 @@ export function ResourcePage({ section }: { section: Section }) {
           </SelectContent>
         </Select>
         <div className="ml-auto flex gap-2">
-          {["servers", "domains", "dns", "jobs"].includes(section) && (
-            <Button variant="outline" size="sm" onClick={simulateCheck}>
+          {["servers", "domains", "dns"].includes(section) && (
+            <Button variant="outline" size="sm" onClick={runChecks} disabled={busy}>
               <RefreshCw className={busy ? "animate-spin" : ""} />
               {busy ? "Checking…" : "Run checks"}
             </Button>
@@ -337,7 +358,7 @@ export function ResourcePage({ section }: { section: Section }) {
         <span>
           {shown.length} OF {rows.length} RECORDS
         </span>
-        <span>SAMPLE DATA</span>
+        <span>{backend === "online" ? "LIVE DATA" : "OFFLINE"}</span>
       </div>
       <Dialog
         open={!!editor}
@@ -345,15 +366,11 @@ export function ResourcePage({ section }: { section: Section }) {
           if (!open) setEditor(null);
         }}
       >
-        <DialogContent className="dialog-scroll">
+        <DialogContent className="dialog-scroll" aria-describedby={undefined}>
           <DialogTitle>
             {editor && rows.some((r) => r.id === editor.id) ? "Edit" : config.action || "Add"}{" "}
             {editor && rows.some((r) => r.id === editor.id) ? config.singular : ""}
           </DialogTitle>
-          <DialogDescription>
-            Frontend session only. Credentials and infrastructure changes require a secure service
-            connection.
-          </DialogDescription>
           {editor && (
             <form onSubmit={submit} className="grid grid-cols-2 gap-4">
               {config.fields.map((f) => (
@@ -409,7 +426,7 @@ export function ResourcePage({ section }: { section: Section }) {
                       ...editor,
                       password: Array.from(values, (v) => v.toString(36)).join(""),
                     });
-                    notify("Password generated. It will not be stored in sample records.");
+                    notify("Password generated. It will be saved with the mailbox.");
                   }}
                 >
                   <KeyRound />
@@ -449,7 +466,7 @@ export function ResourcePage({ section }: { section: Section }) {
       >
         <DialogContent className="dialog-scroll">
           <DialogTitle className="break-all pr-5">{detail?.name}</DialogTitle>
-          <DialogDescription>{config.title} · Sample resource details</DialogDescription>
+          <DialogDescription className="capitalize">{config.singular} details</DialogDescription>
           {detail && (
             <>
               <Status value={detail.status} />
@@ -477,24 +494,40 @@ export function ResourcePage({ section }: { section: Section }) {
                 <>
                   <div className="border-b border-border py-3">
                     <p className="text-xs">Ownership TXT challenge</p>
-                    <p className="mt-2 break-all font-mono text-[10px] text-primary">
-                      _relay-verification.{detail.name}
-                    </p>
-                    <div className="mt-2 flex items-center justify-between gap-2">
-                      <code className="break-all text-[10px]">
-                        relay-verify=sample-challenge-{detail.id}
-                      </code>
-                      <Button
-                        variant="ghost"
-                        size="icon"
-                        aria-label="Copy verification challenge"
-                        onClick={() => copy(`relay-verify=sample-challenge-${detail.id}`)}
-                      >
-                        <Copy />
-                      </Button>
-                    </div>
+                    {detail["verificationName"] && detail["verificationToken"] ? (
+                      <>
+                        <p className="mt-2 break-all font-mono text-[10px] text-primary">
+                          {detail["verificationName"]}
+                        </p>
+                        <div className="mt-2 flex items-center justify-between gap-2">
+                          <code className="break-all text-[10px]">
+                            relay-verify={detail["verificationToken"]}
+                          </code>
+                          <Button
+                            variant="ghost"
+                            size="icon"
+                            aria-label="Copy verification challenge"
+                            onClick={() =>
+                              copy(
+                                `${detail["verificationName"]} relay-verify=${detail["verificationToken"]}`,
+                              )
+                            }
+                          >
+                            <Copy />
+                          </Button>
+                        </div>
+                      </>
+                    ) : (
+                      <p className="mt-2 text-xs text-muted-foreground">
+                        No verification challenge has been issued yet. Run checks to request one.
+                      </p>
+                    )}
                   </div>
-                  <Button variant="outline" onClick={simulateCheck}>
+                  <Button
+                    variant="outline"
+                    onClick={() => verifyOwnership(detail.id)}
+                    disabled={busy}
+                  >
                     Verify ownership
                     <RefreshCw />
                   </Button>
@@ -502,27 +535,31 @@ export function ResourcePage({ section }: { section: Section }) {
               )}
               {section === "servers" && (
                 <>
-                  <p className="mt-3 eyebrow">SERVICE REACHABILITY · SAMPLE</p>
-                  <div className="grid grid-cols-4 gap-2 text-xs">
-                    {["SMTP :25", "SMTPS :465", "IMAP :993", "HTTPS :443"].map((p) => (
-                      <div key={p} className="border-y border-border py-3">
-                        <span className="block text-[10px] text-muted-foreground">{p}</span>
-                        <span className="mt-2 block text-primary">Available</span>
-                      </div>
-                    ))}
-                  </div>
+                  <p className="mt-3 eyebrow">LAST HEALTH CHECK</p>
+                  <p className="text-xs leading-6 text-muted-foreground">
+                    Last check: {detail["lastCheck"]}
+                    <br />
+                    Last error: {detail["checkError"]}
+                  </p>
                   <Button
                     variant="outline"
-                    onClick={() => {
-                      save(section, {
-                        ...detail,
-                        status: detail.status === "Maintenance" ? "Pending" : "Maintenance",
-                      });
-                      setDetail(null);
-                      notify("Sample maintenance state updated. No services were restarted.");
+                    onClick={async () => {
+                      try {
+                        await api.toggleServerMaintenance(
+                          detail.id,
+                          detail["maintenance"] !== "Enabled",
+                        );
+                        refresh("servers");
+                        setDetail(null);
+                        notify("Maintenance mode updated.");
+                      } catch (e) {
+                        notify(describe(e));
+                      }
                     }}
                   >
-                    Toggle maintenance mode
+                    {detail["maintenance"] === "Enabled"
+                      ? "Disable maintenance mode"
+                      : "Enable maintenance mode"}
                   </Button>
                 </>
               )}
@@ -538,11 +575,22 @@ export function ResourcePage({ section }: { section: Section }) {
                   </p>
                   <Button
                     variant="outline"
-                    onClick={() =>
-                      notify(
-                        "Password reset requires the mail-engine service. No reset was performed.",
-                      )
-                    }
+                    onClick={async () => {
+                      const values = new Uint32Array(5);
+                      crypto.getRandomValues(values);
+                      const password = Array.from(values, (v) => v.toString(36)).join("");
+                      try {
+                        await api.updateMailbox(detail.id, { password });
+                        try {
+                          await navigator.clipboard.writeText(password);
+                        } catch {
+                          /* clipboard unavailable */
+                        }
+                        notify("New mailbox password set and copied to the clipboard.");
+                      } catch (e) {
+                        notify(describe(e));
+                      }
+                    }}
                   >
                     Reset password
                     <KeyRound />
@@ -551,33 +599,21 @@ export function ResourcePage({ section }: { section: Section }) {
               )}
               {section === "jobs" && (
                 <>
-                  <p className="eyebrow mt-2">JOB EXECUTION TRACE · SAMPLE</p>
-                  <div className="space-y-3 py-2 font-mono text-[11px]">
-                    {[
-                      "Preflight validation completed",
-                      "Resource authorization checked",
-                      "Mail engine request submitted",
-                      detail.status === "Failed"
-                        ? "DNS check failed: DMARC record missing"
-                        : "Post-provision verification completed",
-                    ].map((v, i) => (
-                      <p
-                        key={v}
-                        className={
-                          i === 3 && detail.status === "Failed"
-                            ? "text-warning"
-                            : "text-muted-foreground"
-                        }
-                      >
-                        {`0${i + 1}`} <span className="ml-3">{v}</span>
-                      </p>
-                    ))}
-                  </div>
+                  {detail["error"] && detail["error"] !== "-" && (
+                    <p className="mt-2 break-all text-xs text-warning">{detail["error"]}</p>
+                  )}
                   <Button
                     variant="outline"
-                    onClick={() =>
-                      notify("Retry requires a connected job service. No job was executed.")
-                    }
+                    onClick={async () => {
+                      try {
+                        await api.retryJob(detail.id);
+                        refresh("jobs");
+                        setDetail(null);
+                        notify("Job retry queued.");
+                      } catch (e) {
+                        notify(describe(e));
+                      }
+                    }}
                   >
                     Retry job
                     <RefreshCw />
@@ -592,30 +628,11 @@ export function ResourcePage({ section }: { section: Section }) {
                   </p>
                   <Button
                     variant="outline"
-                    onClick={() =>
-                      notify("Restore is not connected. No mail or configuration was changed.")
-                    }
+                    onClick={() => notify("Restore is not available through the DevMail API yet.")}
                   >
                     Review restore prerequisites
                   </Button>
                 </>
-              )}
-              {["domains", "mailboxes", "users", "routing", "aliases"].includes(section) && (
-                <Button
-                  variant="outline"
-                  onClick={() => {
-                    save(section, {
-                      ...detail,
-                      status: detail.status === "Suspended" ? "Pending" : "Suspended",
-                    });
-                    setDetail(null);
-                    notify("Sample resource state changed. No live resources were modified.");
-                  }}
-                >
-                  {detail.status === "Suspended"
-                    ? "Reactivate (pending verification)"
-                    : "Suspend resource"}
-                </Button>
               )}
             </>
           )}
@@ -630,8 +647,8 @@ export function ResourcePage({ section }: { section: Section }) {
         <DialogContent>
           <DialogTitle>Remove {config.singular}?</DialogTitle>
           <DialogDescription>
-            This removes {deletion?.name} from the sample session only. Live destructive operations
-            are not connected.
+            This permanently removes {deletion?.name} from the DevMail backend. This cannot be
+            undone.
           </DialogDescription>
           <div className="mt-3 flex justify-end gap-3">
             <Button variant="ghost" onClick={() => setDeletion(null)}>
@@ -643,7 +660,7 @@ export function ResourcePage({ section }: { section: Section }) {
                 if (!deletion) return;
                 remove(section, deletion.id);
                 setDeletion(null);
-                notify("Sample record removed.");
+                notify(`${config.singular} removed.`);
               }}
             >
               Remove {config.singular}

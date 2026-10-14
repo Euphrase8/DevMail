@@ -77,8 +77,9 @@ export function WebmailPage() {
             Webmail authentication is handled by your mail suite. Your administrator session does
             not grant mailbox access. Single sign-on requires a supported, connected integration.
           </p>
-          <p className="mt-5 text-xs text-warning">
-            This preview is not connected to a live mail server.
+          <p className="mt-5 text-xs text-muted-foreground">
+            Webmail opens your configured endpoint in a new tab; signing in to a mailbox is handled
+            by your mail suite, not this console.
           </p>
         </div>
       </div>

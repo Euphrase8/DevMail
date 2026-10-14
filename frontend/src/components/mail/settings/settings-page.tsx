@@ -1,4 +1,5 @@
 import { useState } from "react";
+import { useQuery } from "@tanstack/react-query";
 import { KeyRound, Save, ShieldCheck } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import {
@@ -8,6 +9,7 @@ import {
   SelectTrigger,
   SelectValue,
 } from "@/components/ui/select";
+import { api, ApiError } from "@/lib/api";
 import { useMail } from "../store";
 const tabs = [
   "General",
@@ -19,9 +21,11 @@ const tabs = [
   "API & integrations",
 ];
 export function SettingsPage() {
-  const { settings, setSetting, notify } = useMail();
+  const { settings, setSetting, notify, backend } = useMail();
   const [tab, setTab] = useState("General");
   const [values, setValues] = useState({ ...settings });
+  const engine = useQuery({ queryKey: ["engine-status"], queryFn: api.engineStatus });
+  const sessions = useQuery({ queryKey: ["auth-sessions"], queryFn: api.sessions });
   const input = (key: string, placeholder = "") => (
     <input
       aria-label={key}
@@ -72,7 +76,7 @@ export function SettingsPage() {
           Object.entries(values)
             .filter(([k]) => !k.includes("password") && !k.includes("token"))
             .forEach(([k, v]) => setSetting(k, v));
-          notify("Sample settings saved for this session. Services are not configured.");
+          notify("Settings saved.");
         }}
       >
         <div className="mt-8 flex flex-col lg:h-[calc(100vh-220px)] lg:overflow-hidden">
@@ -137,15 +141,23 @@ export function SettingsPage() {
                   )}
                   {row(
                     "API credential",
-                    "Use a restricted key. Never expose credentials in browser code.",
-                    <p className="py-2 text-xs text-warning">
-                      Credential entry is disabled until a secure service is connected.
+                    "Use a restricted key. Credentials are configured server-side and never entered in the browser.",
+                    <p className="py-2 text-xs text-muted-foreground">
+                      Configure engine credentials through your backend deployment.
                     </p>,
                   )}
                   {row(
                     "Connection status",
-                    "No live engine is connected to this preview.",
-                    <span className="status status-pending">Not connected</span>,
+                    "Live mail-engine adapter reported by the backend.",
+                    <span
+                      className={`status capitalize ${engine.data?.configured ? "status-healthy" : "status-pending"}`}
+                    >
+                      {engine.isPending
+                        ? "Checking…"
+                        : engine.data?.configured
+                          ? `${engine.data.name} connected`
+                          : "Not configured"}
+                    </span>,
                   )}
                 </>
               )}
@@ -164,8 +176,8 @@ export function SettingsPage() {
                   {row(
                     "API token",
                     "Zone-scoped DNS read and edit permissions only.",
-                    <p className="py-2 text-xs text-warning">
-                      Secure credential storage requires service integration.
+                    <p className="py-2 text-xs text-muted-foreground">
+                      Add provider tokens under DNS → Providers. They are stored server-side.
                     </p>,
                   )}
                   {row(
@@ -182,19 +194,12 @@ export function SettingsPage() {
                 <>
                   {row(
                     "Multi-factor authentication",
-                    "TOTP enrollment needs a connected authentication service.",
-                    <Button
-                      type="button"
-                      variant="outline"
-                      onClick={() =>
-                        notify(
-                          "MFA enrollment requires authentication integration. It is not enabled.",
-                        )
-                      }
+                    "TOTP two-factor authentication is verified at sign-in when enabled for your account.",
+                    <span
+                      className={`status ${sessions.data ? "status-healthy" : "status-pending"}`}
                     >
-                      Set up authenticator
-                      <KeyRound />
-                    </Button>,
+                      Backend supported
+                    </span>,
                   )}
                   {row(
                     "Session duration",
@@ -203,11 +208,20 @@ export function SettingsPage() {
                   )}
                   {row(
                     "Active sessions",
-                    "This is a frontend preview, not an authenticated session.",
+                    `${sessions.data?.length ?? 0} authenticated session${(sessions.data?.length ?? 0) === 1 ? "" : "s"} currently active.`,
                     <Button
                       type="button"
                       variant="outline"
-                      onClick={() => notify("No authenticated sessions are connected to revoke.")}
+                      disabled={!sessions.data?.length}
+                      onClick={async () => {
+                        try {
+                          await api.revokeSessions();
+                          await sessions.refetch();
+                          notify("All sessions revoked. You will need to sign in again.");
+                        } catch (e) {
+                          notify(e instanceof ApiError ? e.message : "Could not revoke sessions.");
+                        }
+                      }}
                     >
                       Revoke all sessions
                     </Button>,
@@ -278,22 +292,26 @@ export function SettingsPage() {
                 <>
                   {row(
                     "Control-plane API",
-                    "Connection boundary for the continuing implementation.",
+                    "Base URL of the DevMail control-plane API.",
                     input("api"),
                   )}
                   {row(
                     "Service status",
-                    "Backend services are intentionally outside this frontend scope.",
-                    <span className="status status-pending">Not connected</span>,
+                    "Live connection to the DevMail backend.",
+                    <span
+                      className={`status ${backend === "online" ? "status-healthy" : "status-pending"}`}
+                    >
+                      {backend === "online" ? "Connected" : "Offline"}
+                    </span>,
                   )}
                   {row(
                     "Administrative tokens",
-                    "Tokens must be issued and stored by the backend.",
+                    "Scoped API tokens are issued by the backend.",
                     <Button
                       type="button"
                       variant="outline"
                       onClick={() =>
-                        notify("Token issuance is not connected. No API token was created.")
+                        notify("Token issuance is not available through the DevMail API yet.")
                       }
                     >
                       Create scoped token
@@ -309,7 +327,8 @@ export function SettingsPage() {
               )}
               <div className="mt-8 flex items-center justify-between gap-4 border-t border-border pt-5">
                 <p className="text-[11px] text-muted-foreground">
-                  Frontend settings only · sensitive credentials are never retained.
+                  Settings are stored by the DevMail backend. Credentials are never retained in the
+                  browser.
                 </p>
                 <Button type="submit" size="sm">
                   <Save />

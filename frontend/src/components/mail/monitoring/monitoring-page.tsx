@@ -8,12 +8,29 @@ import {
   SelectTrigger,
   SelectValue,
 } from "@/components/ui/select";
+import { api, ApiError } from "@/lib/api";
 import { useMail } from "../store";
 import { InfrastructureMap, Status, TrafficChart } from "../shared/visualizations";
 export function MonitoringPage() {
-  const { data, notify } = useMail();
+  const { data, notify, refresh } = useMail();
   const [period, setPeriod] = useState("24 hours");
   const [tab, setTab] = useState("Delivery");
+  const [busy, setBusy] = useState(false);
+  const runChecks = async () => {
+    setBusy(true);
+    try {
+      await api.checkAllServers();
+      refresh("servers");
+      notify("Checks submitted. Results refresh shortly.");
+    } catch (e) {
+      notify(e instanceof ApiError ? e.message : "Check failed.");
+    } finally {
+      setBusy(false);
+    }
+  };
+  const openAlerts = (data["domains"] ?? []).filter((d) =>
+    ["Degraded", "Pending", "Missing"].includes(d.status),
+  );
   return (
     <div className="page-enter">
       <div className="grid grid-cols-[minmax(0,1fr)_auto] items-center gap-3">
@@ -30,9 +47,10 @@ export function MonitoringPage() {
           variant="outline"
           size="icon"
           aria-label="Refresh monitoring"
-          onClick={() => notify("Sample monitoring refreshed. Live probes are not connected.")}
+          disabled={busy}
+          onClick={runChecks}
         >
-          <RefreshCw />
+          <RefreshCw className={busy ? "animate-spin" : ""} />
         </Button>
       </div>
       <div className="mt-8 grid grid-cols-2 border-y border-border py-6 lg:grid-cols-4">
@@ -123,25 +141,40 @@ export function MonitoringPage() {
       )}
       <section className="border-t border-border pt-6">
         <h2 className="section-heading">Open alerts</h2>
-        <div className="activity-row grid grid-cols-[auto_minmax(0,1fr)_auto] items-center gap-4">
-          <TriangleAlert className="size-4 text-warning" />
-          <div>
-            <p className="text-xs">Missing DMARC record</p>
-            <p className="mt-2 text-xs text-muted-foreground">
-              orbit.design · Domain authentication · Sample warning
-            </p>
+        {openAlerts.length ? (
+          openAlerts.slice(0, 3).map((d) => (
+            <div
+              key={d.id}
+              className="activity-row grid grid-cols-[auto_minmax(0,1fr)_auto] items-center gap-4"
+            >
+              <TriangleAlert className="size-4 text-warning" />
+              <div>
+                <p className="text-xs">{d.name}</p>
+                <p className="mt-2 text-xs text-muted-foreground">
+                  Domain authentication · {d.status}
+                </p>
+              </div>
+              <Button
+                variant="outline"
+                size="sm"
+                onClick={() =>
+                  notify("Alert acknowledgement isn't available through the DevMail API yet.")
+                }
+              >
+                Acknowledge
+              </Button>
+            </div>
+          ))
+        ) : (
+          <div className="activity-row grid grid-cols-[auto_minmax(0,1fr)] items-center gap-4">
+            <ShieldCheck className="size-4 text-primary" />
+            <p className="text-xs text-muted-foreground">No domains need attention right now.</p>
           </div>
-          <Button
-            variant="outline"
-            size="sm"
-            onClick={() => notify("Sample alert acknowledged. Live alert state is not connected.")}
-          >
-            Acknowledge
-          </Button>
-        </div>
+        )}
         <div className="mt-5 flex items-center gap-2 text-xs text-muted-foreground">
           <ShieldCheck className="size-4 text-primary" />
-          Metrics are illustrative; production health requires actual probes and delivery checks.
+          Delivery metrics shown here are illustrative placeholders; production health requires live
+          monitoring probes.
         </div>
       </section>
     </div>

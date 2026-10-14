@@ -7,12 +7,11 @@ import {
   ChevronsUpDown,
   CircleHelp,
   Menu,
-  Moon,
   Search,
-  Sun,
   X,
 } from "lucide-react";
 import { Button } from "@/components/ui/button";
+import { ThemeToggle } from "@/components/theme-toggle";
 import { Dialog, DialogContent, DialogTitle, DialogDescription } from "@/components/ui/dialog";
 import { navigation } from "@/lib/mail/data";
 import { useMail } from "../store";
@@ -20,14 +19,14 @@ import { useMail } from "../store";
 export function Logo() {
   return (
     <span className="flex items-center gap-2.5">
-      <svg width="25" height="27" viewBox="0 0 25 27" aria-hidden="true" className="text-primary">
-        <path
-          d="M2 7 12.5 1 23 7 12.5 13ZM2 13 12.5 19 23 13M2 19 12.5 25 23 19"
-          stroke="currentColor"
-          strokeWidth="2"
-          fill="none"
+      <span className="grid size-8 shrink-0 place-items-center overflow-hidden rounded-md border border-border bg-subtle">
+        <img
+          src="/brand/devmail-art-coral.svg"
+          alt=""
+          aria-hidden
+          className="h-full w-full scale-[2.6] object-cover"
         />
-      </svg>
+      </span>
       <span className="text-[23px] font-medium">
         devmail<span className="text-primary">.</span>
       </span>
@@ -42,11 +41,7 @@ export function MailShell({ children }: { children: ReactNode }) {
   const [searchOpen, setSearchOpen] = useState(false);
   const [query, setQuery] = useState("");
   const [panel, setPanel] = useState("");
-  const [theme, setTheme] = useState<"light" | "dark">("light");
 
-  useEffect(() => {
-    document.documentElement.classList.toggle("dark", theme === "dark");
-  }, [theme]);
   useEffect(() => {
     setMobile(false);
     setPanel("");
@@ -102,15 +97,7 @@ export function MailShell({ children }: { children: ReactNode }) {
             <span className="live-dot" />
             {backend === "online" ? "API connected" : "Not connected"}
           </span>
-          <Button
-            aria-label="Toggle color theme"
-            title="Toggle color theme"
-            variant="ghost"
-            size="icon"
-            onClick={() => setTheme(theme === "light" ? "dark" : "light")}
-          >
-            {theme === "light" ? <Moon className="size-4" /> : <Sun className="size-4" />}
-          </Button>
+          <ThemeToggle />
           <Button
             aria-label="Search workspace"
             title="Search workspace (⌘K)"

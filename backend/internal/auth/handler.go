@@ -100,6 +100,11 @@ func (h *Handler) Login(c *gin.Context) {
 	user, token, err := h.svc.Login(ctx, req.Email, req.Password, c.ClientIP(), c.Request.UserAgent(), req.Code)
 	if err != nil {
 		AuthEvent(ctx, h.pool, nil, "auth.login_failed", c.ClientIP())
+		if errors.Is(err, ErrAccountLocked) {
+			c.Header("Retry-After", "900")
+			httpapi.Fail(c, http.StatusTooManyRequests, httpapi.ErrRateLimited, "Too many failed sign-in attempts. This account is temporarily locked — try again in about 15 minutes.")
+			return
+		}
 		if errors.Is(err, ErrNotFound) || err.Error() == "invalid credentials" {
 			httpapi.Fail(c, http.StatusUnauthorized, httpapi.ErrUnauthorized, "Invalid email or password.")
 			return

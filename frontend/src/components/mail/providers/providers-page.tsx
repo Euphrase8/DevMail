@@ -11,6 +11,7 @@ import {
   type LucideIcon,
 } from "lucide-react";
 import { Button } from "@/components/ui/button";
+import { api, ApiError } from "@/lib/api";
 import { useMail } from "../store";
 import { Status } from "../shared/visualizations";
 
@@ -36,15 +37,20 @@ const steps = [
 ];
 
 export function ProvidersPage() {
-  const { data, notify } = useMail();
+  const { data, notify, refresh } = useMail();
   const providers = data["providers"] ?? [];
   const connected = providers.filter((p) => p.status === "Connected").length;
   const manual = providers.filter((p) => p.name === "Manual").length;
 
-  const connect = (name: string) =>
-    notify(
-      `Provider authorization requires the secure backend service. ${name} was not connected and no credentials were stored.`,
-    );
+  const verify = async (id: string, name: string) => {
+    try {
+      await api.verifyProvider(id);
+      refresh("providers");
+      notify(`${name} connection verified.`);
+    } catch (e) {
+      notify(e instanceof ApiError ? e.message : `Could not verify ${name}.`);
+    }
+  };
 
   return (
     <div className="page-enter">
@@ -61,7 +67,11 @@ export function ProvidersPage() {
           ["INTEGRATIONS", String(providers.length), "API and manual providers"],
           ["AUTHORIZED", String(connected), "Provider connections live"],
           ["MANUAL MODE", String(manual), "Works with every DNS host"],
-          ["RECORDS TRACKED", "8", "Generated per real configuration"],
+          [
+            "RECORDS TRACKED",
+            String((data["dns"] ?? []).length),
+            "Generated per real configuration",
+          ],
         ].map(([l, v, d]) => (
           <div key={l} className="metric">
             <div className="eyebrow">{l}</div>
@@ -108,17 +118,17 @@ export function ProvidersPage() {
                     </Button>
                   </>
                 ) : (
-                  <Button size="sm" onClick={() => connect(p.name)}>
+                  <Button size="sm" onClick={() => verify(p.id, p.name)}>
                     <KeyRound />
-                    Connect {p.name}
+                    Verify {p.name}
                   </Button>
                 )}
               </div>
               {!isManual && p.status !== "Connected" && (
                 <p className="mt-4 flex items-start gap-2 border-t border-border pt-3 text-[11px] leading-5 text-warning">
                   <LockKeyhole className="mt-0.5 size-3.5 shrink-0" />
-                  Requires the secure backend service. Tokens are stored encrypted, never in the
-                  frontend.
+                  Add a zone-scoped token to apply records automatically. Tokens are stored
+                  encrypted server-side, never in the frontend.
                 </p>
               )}
             </section>
@@ -164,8 +174,7 @@ export function ProvidersPage() {
           </ul>
           <p className="mt-6 flex items-start gap-2 border-t border-border pt-4 text-[11px] leading-5 text-warning">
             <TriangleAlert className="mt-0.5 size-3.5 shrink-0" />
-            No provider is connected in this preview. Everything above is the target behavior of the
-            continuing backend integration.
+            No provider is connected yet. Add a provider to enable automatic DNS record changes.
           </p>
         </section>
       </div>

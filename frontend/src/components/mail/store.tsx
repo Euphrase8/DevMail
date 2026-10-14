@@ -23,6 +23,7 @@ type Store = {
   data: Record<MailRecordSection, MailRecord[]>;
   save: (section: string, item: MailRecord) => void;
   remove: (section: string, id: string) => void;
+  refresh: (section: string) => void;
   notice: string;
   notify: (message: string) => void;
   settings: Record<string, string>;
@@ -129,6 +130,9 @@ function serverToRecord(s: Server): MailRecord {
     cpu: "",
     memory: "",
     disk: "",
+    maintenance: s.maintenance ? "Enabled" : "Disabled",
+    lastCheck: s.lastCheckAt || "Never checked",
+    checkError: s.lastCheckError || "None",
   };
 }
 
@@ -149,6 +153,9 @@ function domainToRecord(d: Domain, servers: Server[]): MailRecord {
     quota: bytesToGb(d.quotaBytes),
     serverId: d.serverId,
     catchall: d.catchAll ? "Enabled" : "Disabled",
+    verificationName: d.verificationName || "",
+    verificationToken: d.verificationToken || "",
+    verified: d.verifiedAt ? "Verified" : "Unverified",
   };
 }
 
@@ -704,6 +711,7 @@ export function MailProvider({ children }: { children: ReactNode }) {
     data,
     save,
     remove,
+    refresh: invalidate,
     notice,
     notify,
     settings,

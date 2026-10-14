@@ -13,8 +13,13 @@ import {
 import { useEffect, type ReactNode } from "react";
 
 import appCss from "../styles.css?url";
+import { initTheme } from "@/lib/theme";
 import { MailProvider, useMail } from "@/components/mail/store";
 import { MailShell } from "@/components/mail/shell/shell";
+
+// Applied before first paint so the stored theme is on <html> during hydration
+// (no flash of the wrong theme, no server/client markup mismatch).
+const THEME_BOOTSTRAP = `(function(){try{var k='devmail-theme';var t=localStorage.getItem(k);if(t!=='light'&&t!=='dark'){t=window.matchMedia('(prefers-color-scheme: dark)').matches?'dark':'light';}var e=document.documentElement;e.classList.toggle('dark',t==='dark');e.style.colorScheme=t;}catch(e){}})();`;
 
 // SessionGate redirects anonymous visitors to the login screen once we know
 // the API is reachable and has no session for this browser. When the backend
@@ -109,6 +114,7 @@ export const Route = createRootRouteWithContext<{ queryClient: QueryClient }>()(
         rel: "stylesheet",
         href: appCss,
       },
+      { rel: "icon", type: "image/svg+xml", href: "/brand/devmail-art-coral.svg" },
       { rel: "icon", href: "/favicon.ico", type: "image/x-icon" },
       { rel: "preconnect", href: "https://fonts.googleapis.com" },
       { rel: "preconnect", href: "https://fonts.gstatic.com", crossOrigin: "anonymous" },
@@ -128,6 +134,7 @@ function RootShell({ children }: { children: ReactNode }) {
   return (
     <html lang="en">
       <head>
+        <script dangerouslySetInnerHTML={{ __html: THEME_BOOTSTRAP }} />
         <HeadContent />
       </head>
       <body>
@@ -141,6 +148,8 @@ function RootShell({ children }: { children: ReactNode }) {
 function RootComponent() {
   const { queryClient } = Route.useRouteContext();
   const { pathname } = useLocation();
+
+  useEffect(() => initTheme(), []);
 
   return (
     <QueryClientProvider client={queryClient}>
