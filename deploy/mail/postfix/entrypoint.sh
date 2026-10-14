@@ -167,6 +167,11 @@ smtps inet n       -       y       -       -       smtpd
   -o milter_macro_daemon_name=ORIGINATING
 EOF
 
+# Containers do not populate the Postfix chroot with resolver/host files, so the
+# chrooted smtpd/rewrite processes cannot resolve "db" or "opendkim". Every
+# service here is container-local, so run them outside the chroot.
+postconf -F '*/*/chroot = n'
+
 # Make the shared socket directory usable by both containers (dovecot creates
 # the sockets; postfix connects through them).
 chmod 1777 /var/spool/postfix/private
