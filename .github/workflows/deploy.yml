@@ -27,7 +27,6 @@ jobs:
           username: ${{ secrets.VPS_USER }}
           key: ${{ secrets.VPS_SSH_KEY }}
           port: ${{ secrets.VPS_PORT }}
-          fingerprint: SHA256:7VCm1c9KaGU3fYo7JeRFu2CoOgA7lUSybN4ctmgcUM4
           command_timeout: 15m
           script_stop: true
           script: |
