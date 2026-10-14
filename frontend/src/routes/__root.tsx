@@ -21,22 +21,20 @@ import { MailShell, Logo } from "@/components/mail/shell/shell";
 // (no flash of the wrong theme, no server/client markup mismatch).
 const THEME_BOOTSTRAP = `(function(){try{var k='devmail-theme';var t=localStorage.getItem(k);if(t!=='light'&&t!=='dark'){t=window.matchMedia('(prefers-color-scheme: dark)').matches?'dark':'light';}var e=document.documentElement;e.classList.toggle('dark',t==='dark');e.style.colorScheme=t;}catch(e){}})();`;
 
-// SessionGate keeps anonymous visitors on the auth screen. Until the session is
-// known it shows a neutral splash instead of the workspace, so a signed-out
-// visit never flashes the dashboard before landing on sign-in. When the API is
-// unreachable the workspace renders its honest offline state.
+// SessionGate keeps anonymous visitors on the auth screen. The workspace is
+// only ever painted once a session is known to exist, so a signed-out visit
+// shows a neutral splash and then the sign-in page — never the dashboard.
 function SessionGate({ children }: { children: ReactNode }) {
-  const { session, sessionKnown, backend } = useMail();
+  const { session, sessionKnown } = useMail();
   const navigate = useNavigate();
 
   useEffect(() => {
-    if (backend === "online" && sessionKnown && !session) {
+    if (sessionKnown && !session) {
       navigate({ to: "/login", replace: true });
     }
-  }, [backend, sessionKnown, session, navigate]);
+  }, [sessionKnown, session, navigate]);
 
-  const settled = backend === "offline" || (sessionKnown && !!session);
-  if (!settled) return <AuthSplash />;
+  if (!sessionKnown || !session) return <AuthSplash />;
   return <>{children}</>;
 }
 
