@@ -1,9 +1,13 @@
 FROM golang:1.26-bookworm AS build
 WORKDIR /src
 COPY go.mod go.sum ./
-RUN go mod download
+RUN --mount=type=cache,target=/go/pkg/mod go mod download
 COPY . .
-RUN CGO_ENABLED=0 go build -o /devmail ./cmd/api
+# Persist the module and build caches across builds so a small backend change
+# recompiles only the affected packages instead of the whole program.
+RUN --mount=type=cache,target=/go/pkg/mod \
+    --mount=type=cache,target=/root/.cache/go-build \
+    CGO_ENABLED=0 go build -o /devmail ./cmd/api
 
 FROM postgres:18-bookworm
 RUN mkdir -p /var/lib/devmail/backups && chown postgres:postgres /var/lib/devmail/backups
