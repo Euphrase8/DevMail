@@ -15,7 +15,9 @@ import { useEffect, type ReactNode } from "react";
 import appCss from "../styles.css?url";
 import { initTheme } from "@/lib/theme";
 import { MailProvider, useMail } from "@/components/mail/store";
-import { MailShell, Logo } from "@/components/mail/shell/shell";
+import { MailShell } from "@/components/mail/shell/shell";
+import { Logo } from "@/components/brand";
+import { LoginPage } from "@/components/mail/auth/login-page";
 
 // Applied before first paint so the stored theme is on <html> during hydration
 // (no flash of the wrong theme, no server/client markup mismatch).
@@ -55,6 +57,7 @@ function NotFoundComponent() {
   return (
     <div className="flex min-h-screen items-center justify-center bg-background px-4">
       <div className="max-w-md text-center">
+        <Logo className="mb-8" />
         <h1 className="text-7xl font-bold text-foreground">404</h1>
         <h2 className="mt-4 text-xl font-semibold text-foreground">Page not found</h2>
         <p className="mt-2 text-sm text-muted-foreground">
@@ -80,6 +83,7 @@ function ErrorComponent({ error, reset }: ErrorComponentProps) {
   return (
     <div className="flex min-h-screen items-center justify-center bg-background px-4">
       <div className="max-w-md text-center">
+        <Logo className="mb-8" />
         <h1 className="text-xl font-semibold tracking-tight text-foreground">
           This page didn't load
         </h1>
@@ -128,8 +132,11 @@ export const Route = createRootRouteWithContext<{ queryClient: QueryClient }>()(
         rel: "stylesheet",
         href: appCss,
       },
-      { rel: "icon", type: "image/svg+xml", href: "/brand/devmail-art-coral.svg" },
-      { rel: "icon", href: "/favicon.ico", type: "image/x-icon" },
+      { rel: "icon", href: "/favicon.ico?v=mail-1", type: "image/x-icon" },
+      { rel: "icon", href: "/favicon-32x32.png", type: "image/png", sizes: "32x32" },
+      { rel: "icon", href: "/favicon.svg", type: "image/svg+xml", sizes: "any" },
+      { rel: "apple-touch-icon", href: "/apple-touch-icon.png", sizes: "180x180" },
+      { rel: "manifest", href: "/site.webmanifest" },
       { rel: "preconnect", href: "https://fonts.googleapis.com" },
       { rel: "preconnect", href: "https://fonts.gstatic.com", crossOrigin: "anonymous" },
       {
@@ -169,7 +176,11 @@ function RootComponent() {
     <QueryClientProvider client={queryClient}>
       <MailProvider>
         {pathname === "/login" ? (
-          <Outlet />
+          // Render the sign-in page directly rather than through <Outlet/>.
+          // During the redirect to /login the outlet can briefly resolve the
+          // previous (workspace) match, which would flash the dashboard. The
+          // login route still exists for deep links; this just skips the outlet.
+          <LoginPage />
         ) : (
           <SessionGate>
             <MailShell>
